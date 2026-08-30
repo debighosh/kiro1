@@ -22,5 +22,11 @@ export type { QuestionSubmissionFormProps } from './QuestionSubmissionForm';
 export { QuestionListAndVoting } from './QuestionListAndVoting';
 export type { QuestionListAndVotingProps } from './QuestionListAndVoting';
 
+export { PollCard } from './PollCard';
+export type { PollCardProps } from './PollCard';
+
 export { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 export type { ConnectionStatusIndicatorProps } from './ConnectionStatusIndicator';
+
+export { WordCloudCard } from './WordCloudCard';
+export type { WordCloudCardProps } from './WordCloudCard';
