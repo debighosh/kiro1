@@ -59,6 +59,14 @@ vi.mock('../lib/auth', () => ({
   AdminAuthError,
 }));
 
+// `./screens` now also imports `../lib/eventLookup` (for the audience join
+// flow, task 14.3), which transitively loads the real supabase client and
+// throws without VITE_ env vars. This test only exercises `AdminLogin`, so we
+// stub the lookup to keep the module graph free of the supabase client.
+vi.mock('../lib/eventLookup', () => ({
+  findEventByRef: vi.fn().mockResolvedValue(null),
+}));
+
 // --- Mock react-router's useNavigate while keeping everything else real. ----
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {

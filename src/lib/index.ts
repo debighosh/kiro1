@@ -6,4 +6,6 @@ export * from './env';
 export * from './supabaseClient';
 export * from './auth';
 export * from './events';
+export * from './eventLookup';
 export * from './eventStatus';
+export * from './participant';

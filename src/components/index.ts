@@ -12,3 +12,6 @@ export type { QrDisplayProps, QrErrorCorrectionLevel } from './QrDisplay';
 
 export { StatusTransitionControl } from './StatusTransitionControl';
 export type { StatusTransitionControlProps } from './StatusTransitionControl';
+
+export { EventJoinCard } from './EventJoinCard';
+export type { EventJoinCardProps } from './EventJoinCard';
