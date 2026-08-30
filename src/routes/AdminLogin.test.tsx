@@ -100,6 +100,17 @@ vi.mock('../lib/questions', () => ({
   QUESTION_LENGTH_MESSAGE:
     'Your question must be between 1 and 300 characters.',
   countQuestionCodePoints: (v: string) => [...v].length,
+  // task 15.2: `QuestionListAndVoting` (mounted alongside the submit form) reads
+  // the list on mount and toggles votes. Stub the read/vote helpers so the
+  // module graph stays free of the real supabase client.
+  readAudienceQuestions: vi.fn().mockResolvedValue([]),
+  castQuestionVote: vi.fn().mockResolvedValue(0),
+  removeQuestionVote: vi.fn().mockResolvedValue(0),
+  DEFAULT_QUESTION_SORT: 'most_votes',
+  // task 15.3: the live Q&A section wires `useRealtimeChannel`, which calls
+  // `subscribeToEventQuestions` (→ the real supabase client). Stub it to a
+  // no-op unsubscribe so the module graph stays free of the real client.
+  subscribeToEventQuestions: vi.fn(() => () => {}),
 }));
 
 // `./screens` also imports the shared browser Supabase client directly (for the

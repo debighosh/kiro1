@@ -8,6 +8,7 @@ import {
   AdminLogin,
   AdminDashboard,
   AdminEventEditor,
+  ModerationQueue,
   PresenterView,
   NotFound,
 } from './routes';
@@ -88,6 +89,14 @@ function App(): JSX.Element {
               is (minimal) EDIT mode. The `new` route is registered explicitly
               for clarity, and `:id` still matches it as a fallback (task 8.1). */}
           <Route path="/admin/events/new" element={<AdminEventEditor />} />
+          {/* Moderation queue (task 16.2). Registered before the `:id` editor
+              so the more specific `/moderation` path is unambiguous; React
+              Router v6 ranks by specificity so order is not strictly required,
+              but it stays inside the RequireAuth-guarded admin block. */}
+          <Route
+            path="/admin/events/:id/moderation"
+            element={<ModerationQueue />}
+          />
           <Route path="/admin/events/:id" element={<AdminEventEditor />} />
         </Route>
 

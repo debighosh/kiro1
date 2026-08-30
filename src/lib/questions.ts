@@ -88,6 +88,14 @@ export type QuestionErrorKind =
   | 'rate_limited'
   /** The event is not live, so submissions are closed (RPC `event_not_live`). */
   | 'event_not_live'
+  /** No question exists with the given id (vote RPC `question_not_found`). */
+  | 'question_not_found'
+  /** The question is not approved/featured or its event is not live (vote RPC `not_eligible`). */
+  | 'not_eligible'
+  /** A duplicate cast — the participant already has an active vote (vote RPC `already_voted`). */
+  | 'already_voted'
+  /** A remove requested with no active vote to remove (vote RPC `no_vote_to_remove`). */
+  | 'no_vote_to_remove'
   /** Any other/unexpected failure (network, malformed response, unknown signal). */
   | 'unknown';
 
@@ -273,4 +281,458 @@ export async function submitQuestion(
   }
 
   return { id: row.id, status: row.status };
+}
+
+
+// ============================================================================
+// Question voting + audience list read helpers (Task 15.2).
+//
+// This section adds the client-side gateway the audience voting UI
+// (`QuestionListAndVoting`, task 15.2) uses to (a) read the questions it may
+// display and (b) cast/remove an upvote. It is ADDITIVE — it reuses the
+// QuestionError / QuestionErrorKind pattern above and does not alter the
+// existing submit helper or its exports.
+//
+// As with submission, the SPA never mutates `question_votes` /
+// `questions.vote_count` directly — there is no client write policy that trusts
+// the client (task 12.2). Every cast/remove is routed through the
+// `SECURITY DEFINER` vote RPCs (task 13.3), which are the authoritative
+// enforcement point (eligibility by status + live event, rate limiting, the
+// one-active-vote-per-participant-per-question unique constraint, and the
+// atomic vote_count maintenance).
+//
+// The RPC signatures (supabase/migrations/20260101000015_vote_rpc.sql):
+//   cast_question_vote(p_question_id uuid, p_participant_identifier text)
+//     RETURNS integer  -- the new vote_count
+//   remove_question_vote(p_question_id uuid, p_participant_identifier text)
+//     RETURNS integer  -- the new vote_count
+//
+// On rejection each RPC RAISEs a PostgreSQL exception whose message is a stable
+// signal string — one of `question_not_found`, `not_eligible`, `rate_limited`,
+// `already_voted`, or `no_vote_to_remove`. supabase-js surfaces that message on
+// `error.message`, so we map the signal to a typed {@link QuestionError} with a
+// friendly, user-safe message here.
+//
+// The audience read helper ({@link readAudienceQuestions}) fetches only the
+// non-sensitive columns (`id`, `text`, `status`, `vote_count`, `created_at`)
+// for `approved`/`featured` questions on the event via the anon client — it
+// NEVER selects `participant_identifier` (Req 8.6). This mirrors
+// `readPresenterQuestions` in `../lib/presenter` but is kept here so the
+// audience surface owns its own read (and so `../lib/presenter` is untouched).
+//
+// IMPORTANT — the participant identifier is opaque and MUST NEVER be rendered
+// (Req 8.6, 24.8). It is derived here via {@link getParticipantIdentifier};
+// callers never supply it and it is never returned.
+//
+// Requirements traceability: 3.9, 3.11, 4.1, 4.5, 8.6.
+// Design references: Components (`QuestionListAndVoting`); Request/data flows
+// (Voting with realtime propagation); RLS Design (`questions`,
+// `question_votes`).
+// ============================================================================
+
+/** Name of the server-side cast-vote RPC (task 13.3). */
+export const CAST_QUESTION_VOTE_RPC = 'cast_question_vote' as const;
+/** Name of the server-side remove-vote RPC (task 13.3). */
+export const REMOVE_QUESTION_VOTE_RPC = 'remove_question_vote' as const;
+
+/**
+ * The question statuses the audience may ever see and vote on (Req 3.9, 4.1).
+ * `pending`/`hidden`/`answered` are DELIBERATELY excluded from the audience
+ * voting list — voting is only permitted on `approved`/`featured` questions on
+ * a live event, and RLS already restricts anon reads to these two statuses.
+ */
+export const VOTABLE_QUESTION_STATUSES = ['approved', 'featured'] as const;
+
+/** A single audience-votable question status. */
+export type VotableQuestionStatus = (typeof VOTABLE_QUESTION_STATUSES)[number];
+
+/**
+ * The minimal, non-sensitive projection of a question the audience voting list
+ * renders. Deliberately excludes `participant_identifier` and any
+ * moderation-internal fields (Req 8.6).
+ */
+export interface AudienceQuestion {
+  readonly id: string;
+  readonly text: string;
+  readonly status: VotableQuestionStatus;
+  readonly vote_count: number;
+  readonly created_at: string;
+}
+
+/** The columns the anon client requests for the audience list — minimal. */
+const AUDIENCE_QUESTION_COLUMNS =
+  'id, text, status, vote_count, created_at' as const;
+
+/**
+ * Type guard narrowing an untyped Supabase row to {@link AudienceQuestion},
+ * ALSO enforcing the votable-status allow-list. A row whose status is not in
+ * {@link VOTABLE_QUESTION_STATUSES} (which RLS should already exclude) is
+ * rejected here too — belt-and-braces for Req 3.9/8.6.
+ */
+function isAudienceQuestion(value: unknown): value is AudienceQuestion {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === 'string' &&
+    typeof v.text === 'string' &&
+    typeof v.status === 'string' &&
+    (VOTABLE_QUESTION_STATUSES as readonly string[]).includes(v.status) &&
+    typeof v.vote_count === 'number' &&
+    typeof v.created_at === 'string'
+  );
+}
+
+/** How the audience list is ordered (task 15.2 sort control). */
+export type QuestionSort = 'most_votes' | 'most_recent';
+
+/** The default sort — most votes descending (task 15.2). */
+export const DEFAULT_QUESTION_SORT: QuestionSort = 'most_votes';
+
+/**
+ * Reads the `approved`/`featured` questions for an event through the anonymous
+ * browser client, ordered per {@link QuestionSort}.
+ *
+ * Visibility (Req 3.9, 8.6): the query is filtered to
+ * {@link VOTABLE_QUESTION_STATUSES}; combined with RLS (anon reads are limited
+ * to `approved`/`featured` on a live event) `pending`/`hidden` are NEVER
+ * returned, and `participant_identifier` is never selected. Every row is passed
+ * through {@link isAudienceQuestion}, dropping anything not well-formed and
+ * votable.
+ *
+ *  - `most_votes` (default): `vote_count` desc, then most-recent as a stable
+ *    tie-break.
+ *  - `most_recent`: `created_at` desc.
+ *
+ * This never throws for "no data"; it returns `[]`. A transport/query error is
+ * likewise surfaced as a thrown {@link QuestionError} so the list can render
+ * its error state.
+ *
+ * @param eventId The event whose questions to read.
+ * @param sort    The ordering (defaults to {@link DEFAULT_QUESTION_SORT}).
+ * @returns The votable questions (possibly empty), in the requested order.
+ * @throws {QuestionError} on a transport/query failure.
+ */
+export async function readAudienceQuestions(
+  eventId: string,
+  sort: QuestionSort = DEFAULT_QUESTION_SORT,
+): Promise<AudienceQuestion[]> {
+  if (!eventId) return [];
+
+  let query = supabase
+    .from('questions')
+    .select(AUDIENCE_QUESTION_COLUMNS)
+    .eq('event_id', eventId)
+    // Defence-in-depth alongside RLS: never even ask for pending/hidden.
+    .in('status', VOTABLE_QUESTION_STATUSES as unknown as string[]);
+
+  query =
+    sort === 'most_recent'
+      ? query.order('created_at', { ascending: false })
+      : query
+          .order('vote_count', { ascending: false })
+          .order('created_at', { ascending: false });
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new QuestionError(
+      'The questions could not be loaded. Please check your connection and try again.',
+      { kind: 'unknown', cause: error },
+    );
+  }
+  if (!Array.isArray(data)) return [];
+
+  return data.filter(isAudienceQuestion);
+}
+
+/**
+ * Maps a supabase-js vote-RPC error to a typed {@link QuestionError}.
+ *
+ * The vote RPCs RAISE with a stable signal as the exception message
+ * (`question_not_found` / `not_eligible` / `rate_limited` / `already_voted` /
+ * `no_vote_to_remove`). supabase-js exposes that on `error.message`; we match
+ * on a substring (the message may be wrapped with context) and translate to a
+ * friendly, user-safe message.
+ */
+function toVoteError(error: { message?: string } | null): QuestionError {
+  const raw = (error?.message ?? '').toLowerCase();
+
+  if (raw.includes('rate_limited')) {
+    return new QuestionError(
+      "You're voting too fast. Please wait a moment and try again.",
+      { kind: 'rate_limited', cause: error },
+    );
+  }
+  if (raw.includes('not_eligible')) {
+    return new QuestionError(
+      'This question is no longer open for voting.',
+      { kind: 'not_eligible', cause: error },
+    );
+  }
+  if (raw.includes('question_not_found')) {
+    return new QuestionError('That question could not be found.', {
+      kind: 'question_not_found',
+      cause: error,
+    });
+  }
+  if (raw.includes('already_voted')) {
+    return new QuestionError('You have already voted on this question.', {
+      kind: 'already_voted',
+      cause: error,
+    });
+  }
+  if (raw.includes('no_vote_to_remove')) {
+    return new QuestionError('You have no vote to remove on this question.', {
+      kind: 'no_vote_to_remove',
+      cause: error,
+    });
+  }
+  return new QuestionError(
+    'Your vote could not be recorded. Please check your connection and try again.',
+    { kind: 'unknown', cause: error },
+  );
+}
+
+/**
+ * Narrows an unknown RPC payload to the returned integer `vote_count`. The vote
+ * RPCs `RETURN integer`; supabase-js may surface it as a bare number or wrapped
+ * in a single-element array, so accept either defensively.
+ */
+function toVoteCount(data: unknown): number {
+  const value = Array.isArray(data) ? data[0] : data;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  throw new QuestionError(
+    'Your vote was recorded but the server response was malformed.',
+    { kind: 'unknown', cause: data },
+  );
+}
+
+/**
+ * Casts an upvote on a question via the atomic `cast_question_vote` RPC
+ * (task 13.3).
+ *
+ * The opaque participant identifier is derived via
+ * {@link getParticipantIdentifier} — it is NEVER accepted from the caller and
+ * NEVER returned (Req 8.6). The server enforces eligibility (approved/featured
+ * on a live event), the vote rate limit, and the one-active-vote-per-
+ * participant-per-question unique constraint; a duplicate cast RAISEs
+ * `already_voted` leaving the count unchanged (Req 4.4).
+ *
+ * @param questionId The id of the question to upvote.
+ * @returns The new `vote_count` after the cast (Req 4.1).
+ * @throws {QuestionError} on an RPC rejection signal or a transport failure.
+ */
+export async function castQuestionVote(questionId: string): Promise<number> {
+  const participantIdentifier = getParticipantIdentifier();
+
+  const { data, error } = await supabase.rpc(CAST_QUESTION_VOTE_RPC, {
+    p_question_id: questionId,
+    p_participant_identifier: participantIdentifier,
+  });
+
+  if (error) {
+    throw toVoteError(error);
+  }
+  return toVoteCount(data);
+}
+
+/**
+ * Removes the participant's upvote on a question via the atomic
+ * `remove_question_vote` RPC (task 13.3).
+ *
+ * The opaque participant identifier is derived via
+ * {@link getParticipantIdentifier} — it is NEVER accepted from the caller and
+ * NEVER returned (Req 8.6). Removing when no active vote exists RAISEs
+ * `no_vote_to_remove` and leaves the count unchanged (Req 4.6); a successful
+ * removal decrements the count (Req 4.5).
+ *
+ * @param questionId The id of the question to remove the vote from.
+ * @returns The new `vote_count` after the removal (Req 4.5).
+ * @throws {QuestionError} on an RPC rejection signal or a transport failure.
+ */
+export async function removeQuestionVote(questionId: string): Promise<number> {
+  const participantIdentifier = getParticipantIdentifier();
+
+  const { data, error } = await supabase.rpc(REMOVE_QUESTION_VOTE_RPC, {
+    p_question_id: questionId,
+    p_participant_identifier: participantIdentifier,
+  });
+
+  if (error) {
+    throw toVoteError(error);
+  }
+  return toVoteCount(data);
+}
+
+
+// ============================================================================
+// Event-scoped realtime subscription for the audience Q&A surface (Task 15.3).
+//
+// The audience event view needs to reflect new/approved questions and updated
+// vote counts within the 2-second delivery target (Req 23.1) WITHOUT a manual
+// refresh, while keeping the subscription scope NARROW — a single event, never
+// the full dataset (Req 23.2). This helper opens ONE Supabase Realtime channel
+// scoped to a single `event_id` that combines the two propagation paths the
+// design specifies:
+//
+//   1. Postgres Changes (CDC) on the `questions` table, FILTERED to
+//      `event_id=eq.${eventId}` — surfaces new/approved/updated questions
+//      (Req 23.1, 23.2). This mirrors the `questions` subscription in
+//      `subscribeToPresenter` (../lib/presenter) but is owned here so the
+//      audience surface has its own read/subscribe path.
+//   2. The vote-count Broadcast fan-out (Decision D9) on the per-event topic
+//      `event:{event_id}:votes`, event `vote_count`, produced by the vote RPCs
+//      (migration 20260101000016_vote_broadcast.sql). Under peak voting the
+//      Broadcast path keeps the displayed count within the 2-second target
+//      even when per-row CDC lags (Req 4.7, 23.1). The payload is the
+//      privacy-safe aggregate `{ event_id, question_id, vote_count }` — it
+//      carries NO `participant_identifier` (Req 8.6, 20).
+//
+// Connection-state transitions drive `onConnectionChange` so the consuming hook
+// ({@link useRealtimeChannel}, task 15.3) can surface a reconnecting indicator
+// and drive its exponential-backoff resubscribe (Req 23.5, 23.6, 23.7). This
+// keeps the hook/view free of any direct Supabase import, so they remain
+// unit-testable by mocking `../lib/questions` alone (as the screen tests do).
+//
+// SCOPE INVARIANT: the channel NEVER subscribes to the full dataset. Both the
+// Postgres-changes filter and the Broadcast topic are pinned to this single
+// `eventId`. Callers must pass a concrete event id.
+//
+// Requirements traceability: 23.1, 23.2, 4.7, 8.6.
+// Design references: Frontend Design (Realtime subscription strategy & reconnect
+// UX); Decision D9 (Realtime strategy for high-frequency votes); Request/data
+// flows (Voting with realtime propagation).
+// ============================================================================
+
+/**
+ * The privacy-safe vote-count Broadcast payload emitted by the vote RPCs on the
+ * per-event topic `event:{event_id}:votes` (event `vote_count`), as documented
+ * in migration `20260101000016_vote_broadcast.sql`. It carries ONLY the
+ * aggregate count and the ids needed to route it — never a
+ * `participant_identifier` or any personal data (Req 8.6, 20).
+ */
+export interface VoteCountBroadcast {
+  readonly event_id: string;
+  readonly question_id: string;
+  readonly vote_count: number;
+}
+
+/**
+ * Callbacks the audience Q&A surface (via {@link useRealtimeChannel}) supplies
+ * to {@link subscribeToEventQuestions}.
+ */
+export interface EventQuestionsSubscriptionHandlers {
+  /**
+   * Called (debounced by Realtime delivery) whenever a `questions` row for THIS
+   * event is inserted/updated/deleted, so the view can re-read the current list
+   * (Req 23.1).
+   */
+  readonly onQuestionsChange?: () => void;
+  /**
+   * Called with the aggregate {@link VoteCountBroadcast} on each `vote_count`
+   * Broadcast message for THIS event (Decision D9; Req 4.7). The payload is
+   * privacy-safe (no `participant_identifier`).
+   */
+  readonly onVoteCount?: (payload: VoteCountBroadcast) => void;
+  /**
+   * Called with `true` when the live connection is interrupted (channel error /
+   * timeout / close) and `false` when it (re)subscribes, so the consumer can
+   * show/clear the reconnecting indicator and drive its backoff (Req 23.5–23.7).
+   */
+  readonly onConnectionChange?: (interrupted: boolean) => void;
+}
+
+/** Handle returned by {@link subscribeToEventQuestions}; call it to unsubscribe. */
+export type EventQuestionsUnsubscribe = () => void;
+
+/**
+ * Narrows an untyped Broadcast payload to a {@link VoteCountBroadcast}. Anything
+ * malformed (missing ids, non-numeric count) is rejected so a bad message can
+ * never crash the consuming hook.
+ */
+function isVoteCountBroadcast(value: unknown): value is VoteCountBroadcast {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.event_id === 'string' &&
+    typeof v.question_id === 'string' &&
+    typeof v.vote_count === 'number' &&
+    Number.isFinite(v.vote_count)
+  );
+}
+
+/**
+ * Opens a Supabase Realtime channel scoped to a SINGLE event and wires it to the
+ * audience Q&A handlers (Req 23.1, 23.2, 4.7). It subscribes to:
+ *  - `questions` Postgres changes filtered to this `event_id` — new/approved/
+ *    updated questions (Req 23.1);
+ *  - the per-event vote-count Broadcast topic `event:{event_id}:votes`
+ *    (event `vote_count`) — the D9 high-frequency count fan-out (Req 4.7).
+ *
+ * Connection-state transitions drive `onConnectionChange` so the consumer can
+ * surface a reconnecting indicator and drive an exponential-backoff resubscribe
+ * (Req 23.5–23.7). This keeps the consuming hook/view free of any direct
+ * Supabase import.
+ *
+ * SCOPE INVARIANT (Req 23.2): the channel NEVER subscribes to the full dataset —
+ * both the Postgres-changes filter and the Broadcast topic are pinned to
+ * `eventId`. A falsy `eventId` yields a no-op unsubscribe (nothing is opened).
+ *
+ * @returns an unsubscribe function that removes the channel.
+ */
+export function subscribeToEventQuestions(
+  eventId: string,
+  handlers: EventQuestionsSubscriptionHandlers,
+): EventQuestionsUnsubscribe {
+  // Never open a full-dataset / unscoped channel: an absent event id is a no-op.
+  if (!eventId) {
+    return () => {};
+  }
+
+  const channel = supabase
+    .channel(`event:${eventId}:questions`)
+    // 1) Per-row CDC on questions, FILTERED to this event only (Req 23.2).
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'questions',
+        filter: `event_id=eq.${eventId}`,
+      },
+      () => {
+        handlers.onQuestionsChange?.();
+      },
+    )
+    // 2) The D9 vote-count Broadcast on the per-event topic (Req 4.7). The topic
+    //    is `event:{event_id}:votes`; here we subscribe with the channel's own
+    //    `broadcast` binding for the `vote_count` event and re-scope the payload
+    //    to this event id defensively.
+    .on(
+      'broadcast',
+      { event: 'vote_count' },
+      (message: { payload?: unknown }) => {
+        const payload = (message as { payload?: unknown })?.payload;
+        if (isVoteCountBroadcast(payload) && payload.event_id === eventId) {
+          handlers.onVoteCount?.(payload);
+        }
+      },
+    )
+    .subscribe((state: string) => {
+      // Drive the reconnect UX (Req 23.5–23.7): flag an interruption on any
+      // non-subscribed transport state; clear it once (re)subscribed.
+      if (state === 'SUBSCRIBED') {
+        handlers.onConnectionChange?.(false);
+      } else if (
+        state === 'CHANNEL_ERROR' ||
+        state === 'TIMED_OUT' ||
+        state === 'CLOSED'
+      ) {
+        handlers.onConnectionChange?.(true);
+      }
+    });
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }

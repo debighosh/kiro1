@@ -25,6 +25,9 @@ import {
 import { EventJoinCard } from '../components/EventJoinCard';
 import { QrDisplay } from '../components/QrDisplay';
 import { QuestionSubmissionForm } from '../components/QuestionSubmissionForm';
+import { QuestionListAndVoting } from '../components/QuestionListAndVoting';
+import { ConnectionStatusIndicator } from '../components/ConnectionStatusIndicator';
+import { useRealtimeChannel } from '../hooks/useRealtimeChannel';
 
 /**
  * Minimal placeholder screens for the Milestone 1 routing skeleton (task 1.3).
@@ -156,6 +159,79 @@ const INTERACTION_VIEWS = [
 ] as const;
 
 type InteractionKey = (typeof INTERACTION_VIEWS)[number]['key'];
+
+/**
+ * The live audience Q&A section (tasks 15.1–15.3). Rendered ONLY for a
+ * live/eligible event (the caller gates on participation eligibility, so this
+ * never appears when the event is not live — participation gating is unchanged).
+ *
+ * It mounts the {@link QuestionSubmissionForm} and {@link QuestionListAndVoting}
+ * widgets and wires the event-scoped realtime channel via
+ * {@link useRealtimeChannel} (task 15.3): question/vote updates for THIS event
+ * trigger a lightweight re-read of the list (via a monotonically-increasing
+ * `refreshSignal` passed to {@link QuestionListAndVoting}, which owns its own
+ * list state), and the connection's reconnect UX is surfaced by
+ * {@link ConnectionStatusIndicator} (reconnecting indicator + enabled manual
+ * refresh after a >3 s interruption; terminal error after the retry budget is
+ * exhausted — Req 23.5–23.7).
+ *
+ * The subscription is scoped to `eventId` only — never the full dataset
+ * (Req 23.2) — enforced inside `subscribeToEventQuestions`.
+ *
+ * Requirements traceability: 2.6, 23.1, 23.2, 23.5, 23.6, 23.7, 4.7.
+ * Design: Frontend Design (Realtime subscription strategy & reconnect UX);
+ * Components (`ConnectionStatusIndicator`).
+ */
+function LiveQaSection({ eventId }: { eventId: string }): JSX.Element {
+  // A monotonically-increasing signal the list watches to re-read itself when a
+  // realtime question/vote update arrives. Kept minimal: the list owns its own
+  // state, so we only nudge it to refetch rather than pushing data into it.
+  const [refreshSignal, setRefreshSignal] = useState(0);
+
+  const bumpRefresh = useCallback(() => {
+    setRefreshSignal((n) => n + 1);
+  }, []);
+
+  const { status, refresh } = useRealtimeChannel({
+    eventId,
+    // New/approved/updated questions for this event → re-read the list (Req 23.1).
+    onQuestionsChange: bumpRefresh,
+    // A vote-count Broadcast for this event → re-read so counts stay current
+    // within the 2-second target under peak voting (Decision D9; Req 4.7).
+    onVoteCount: bumpRefresh,
+  });
+
+  const handleRefresh = useCallback(() => {
+    refresh();
+    bumpRefresh();
+  }, [refresh, bumpRefresh]);
+
+  return (
+    <div
+      data-testid="qa-section"
+      className="rounded-lg border border-ink-muted/40 p-4"
+    >
+      <h2 className="text-lg font-semibold text-ink">Questions</h2>
+      <p className="mt-1 text-ink-muted">
+        Ask a question or vote on questions from others.
+      </p>
+
+      {/* Reconnect UX (Req 23.5–23.7): a reconnecting indicator + enabled manual
+          refresh after a >3 s interruption; a terminal error once retries stop.
+          Hidden (sr-only status) while connected. */}
+      <div className="mt-4">
+        <ConnectionStatusIndicator status={status} onRefresh={handleRefresh} />
+      </div>
+
+      {/* MOUNT POINT (tasks 15.x): the audience Q&A widgets. The list re-reads
+          itself when `refreshSignal` changes (driven by realtime updates). */}
+      <div data-testid="qa-mount-point" className="mt-4 flex flex-col gap-6">
+        <QuestionSubmissionForm eventId={eventId} />
+        <QuestionListAndVoting eventId={eventId} refreshSignal={refreshSignal} />
+      </div>
+    </div>
+  );
+}
 
 /**
  * `/e/:eventRef` — audience event view + participation gating (task 14.4).
@@ -339,24 +415,10 @@ export function EventView(): JSX.Element {
           {activeView === 'qa' ? (
             /* Q&A section container (Req 2.6). For M2 this is the clearly-marked
                mount point that tasks 15.x (`QuestionSubmissionForm` +
-               `QuestionListAndVoting`) slot their real widgets into. */
-            <div
-              data-testid="qa-section"
-              className="rounded-lg border border-ink-muted/40 p-4"
-            >
-              <h2 className="text-lg font-semibold text-ink">Questions</h2>
-              <p className="mt-1 text-ink-muted">
-                Ask a question or vote on questions from others.
-              </p>
-              {/* MOUNT POINT (tasks 15.x): the audience Q&A widgets are wired
-                  in here. Task 15.1 mounts `QuestionSubmissionForm` so a live
-                  event shows the submission form; `QuestionListAndVoting`
-                  (task 15.2) is added alongside it later. Only rendered for a
-                  live/eligible event, preserving participation gating. */}
-              <div data-testid="qa-mount-point" className="mt-4">
-                <QuestionSubmissionForm eventId={event.id} />
-              </div>
-            </div>
+               `QuestionListAndVoting` + realtime) slot their real widgets into.
+               Only rendered for a live/eligible event, preserving participation
+               gating. */
+            <LiveQaSection eventId={event.id} />
           ) : (
             /* Poll / word-cloud sections are "coming up" placeholders for M2. */
             <div

@@ -436,3 +436,90 @@ export class QaModel {
     return q.voteCount;
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// 5. Moderation-visibility rule (Req 3.9, 3.10, 7.9) — Property 10.
+//    Mirrors the anonymous SELECT RLS policy on `questions`
+//    (supabase/migrations/20260101000011_questions_rls.sql):
+//
+//      USING ( event_is_live(event_id)
+//              AND status IN ('approved', 'featured', 'answered') )
+//
+//    The audience and the presenter BOTH read questions through this same
+//    anon-equivalent path, so the set of statuses a client may ever see is the
+//    audience-visible set below. The security-critical invariant is that
+//    `pending` and `hidden` are EXCLUDED and can NEVER be returned to a client
+//    (audience or presenter) — see the migration's DECISION note.
+//
+//    `answered` is admitted so a moderator-answered question remains visible as
+//    historical context; presenter modes (see src/lib/presenter.ts's
+//    PRESENTABLE_QUESTION_STATUSES) filter to the same allow-list. Either way,
+//    the exclusion of pending/hidden holds for both surfaces.
+// ---------------------------------------------------------------------------
+
+/**
+ * The question statuses a client (audience OR presenter, both reading via the
+ * anonymous path) may ever see for a LIVE event (Req 3.9, 3.10, 7.9). This is
+ * exactly the status list in the `questions_anon_select_visible` RLS policy.
+ * `pending` and `hidden` are DELIBERATELY absent — they are the moderation
+ * queue / removed states and must never leak to a client.
+ */
+export const AUDIENCE_VISIBLE_STATUSES: readonly QuestionStatus[] = [
+  'approved',
+  'featured',
+  'answered',
+] as const;
+
+/**
+ * The statuses that are NEVER visible to a client on any surface — the core
+ * moderation-privacy guarantee (Req 3.9 pending, Req 3.10 hidden, Req 7.9 both
+ * excluded from the presenter). Kept as an explicit list so tests can assert
+ * the invariant directly and a future status enum addition is a compile-time
+ * prompt to classify it.
+ */
+export const NEVER_VISIBLE_STATUSES: readonly QuestionStatus[] = [
+  'pending',
+  'hidden',
+] as const;
+
+/**
+ * Whether a question in `status` is visible to a client (audience or presenter,
+ * both via the anon read path) given the parent event's live-ness. Mirrors the
+ * `questions_anon_select_visible` RLS predicate exactly: the event must be live
+ * AND the status must be one of {@link AUDIENCE_VISIBLE_STATUSES}
+ * (`approved`/`featured`/`answered`). A `pending` or `hidden` question is NEVER
+ * visible, regardless of live-ness (Req 3.9, 3.10, 7.9).
+ *
+ * This is the single moderation-visibility rule the RLS policy enforces; the
+ * audience and presenter surfaces are computed from it (the presenter may
+ * additionally narrow the set further in its read layer, but never widens it).
+ */
+export function isModerationVisible(status: QuestionStatus, eventLive: boolean): boolean {
+  return eventLive === true && AUDIENCE_VISIBLE_STATUSES.includes(status);
+}
+
+/**
+ * Computes the set of questions visible to a CLIENT surface from a collection
+ * of `(id, status)` rows, applying {@link isModerationVisible} with the given
+ * event live-ness. Both the audience and presenter visible sets are derived
+ * through this same rule (the presenter may pass a narrower `allowedStatuses`
+ * subset of {@link AUDIENCE_VISIBLE_STATUSES}, but can never widen it).
+ *
+ * @param rows           The candidate question rows.
+ * @param eventLive      Whether the parent event is currently live.
+ * @param allowedStatuses Optional narrower allow-list (defaults to the full
+ *   audience-visible set). Any status outside {@link AUDIENCE_VISIBLE_STATUSES}
+ *   in this list is ignored — the rule can only ever restrict, never widen.
+ * @returns The subset of `rows` a client may see.
+ */
+export function visibleQuestions<T extends { readonly status: QuestionStatus }>(
+  rows: readonly T[],
+  eventLive: boolean,
+  allowedStatuses: readonly QuestionStatus[] = AUDIENCE_VISIBLE_STATUSES,
+): T[] {
+  return rows.filter(
+    (row) =>
+      isModerationVisible(row.status, eventLive) && allowedStatuses.includes(row.status),
+  );
+}

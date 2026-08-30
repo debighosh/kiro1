@@ -18,3 +18,9 @@ export type { EventJoinCardProps } from './EventJoinCard';
 
 export { QuestionSubmissionForm } from './QuestionSubmissionForm';
 export type { QuestionSubmissionFormProps } from './QuestionSubmissionForm';
+
+export { QuestionListAndVoting } from './QuestionListAndVoting';
+export type { QuestionListAndVotingProps } from './QuestionListAndVoting';
+
+export { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
+export type { ConnectionStatusIndicatorProps } from './ConnectionStatusIndicator';
