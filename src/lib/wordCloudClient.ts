@@ -333,3 +333,260 @@ export async function submitWordCloudResponse(
     throw toWordCloudError(error);
   }
 }
+
+
+// ============================================================================
+// Word-cloud VISIBLE-AGGREGATE read + event-scoped Realtime subscription
+// (Task 23.4 — audience word-cloud visualisation, additive to task 23.3).
+//
+// The audience visualisation ({@link WordCloudCard} mount point, task 23.4)
+// needs two things beyond the response surface above:
+//
+//   (a) an initial READ of the prompt's VISIBLE responses so it can render the
+//       aggregated cloud immediately (before any broadcast arrives), and
+//   (b) a live SUBSCRIPTION so the cloud updates within the 2-second target
+//       when an entry's visibility changes or new responses arrive (Req 6.15).
+//
+// Both are deliberately NARROW and PRIVACY-SAFE:
+//   - The read selects ONLY `normalised_text` + `is_hidden` — NEVER
+//     `participant_identifier` or any personal data (Req 2.5, 8.6). RLS
+//     (…000022_word_cloud_rls.sql) already restricts anon reads to non-hidden
+//     rows on a live event, so hidden entries never reach the client; we still
+//     re-filter defensively and let the pure `aggregateWordCloud()` exclude
+//     hidden entries as the single source of truth.
+//   - The subscription is pinned to a SINGLE event's Broadcast topic
+//     `event:{event_id}:wordcloud` (event `word_cloud`) — NEVER the full
+//     dataset (Req 23.2). The topic + payload shape match
+//     `broadcast_word_cloud` in
+//     supabase/migrations/20260101000028_word_cloud_moderation_rpc.sql:
+//       { event_id, prompt_id, terms: [{ term, frequency }] }
+//     carrying the RAW visible term/frequency pairs (stop-word exclusion +
+//     monotonic sizing are applied client-side by `aggregateWordCloud()` /
+//     `sizeForFrequency()` in src/lib/wordcloud.ts).
+//
+// This helper mirrors {@link subscribeToPollResults} (../lib/polls) and
+// {@link subscribeToEventQuestions} (../lib/questions).
+//
+// Requirements traceability: 6.11, 6.13, 6.14, 6.15, 23.1, 23.2, 8.6, 24.5.
+// Design references: Technology Stack (d3-cloud — monotonic sizing; we own the
+// aggregation/sizing in wordcloud.ts); Frontend Design (Realtime subscription
+// strategy).
+// ============================================================================
+
+/**
+ * The minimal, PRIVACY-SAFE projection of a visible word-cloud response the
+ * audience visualisation reads. Deliberately excludes `participant_identifier`
+ * and every other column (Req 2.5, 8.6). Shaped to satisfy
+ * {@link WordCloudResponseLike} so it can be fed straight into
+ * `aggregateWordCloud()`.
+ */
+export interface VisibleWordCloudResponse {
+  /** The already-normalised term computed on write (task 22.3). */
+  readonly normalised_text: string;
+  /**
+   * Whether the entry is hidden. RLS already excludes hidden rows for anon
+   * readers, so this is `false` for anon reads; it is selected (and re-checked
+   * by `aggregateWordCloud()`) as defence-in-depth (Req 6.13).
+   */
+  readonly is_hidden: boolean;
+}
+
+/** The columns the anon client requests for visible responses — NEVER participant data. */
+const WORD_CLOUD_RESPONSE_COLUMNS = 'normalised_text, is_hidden' as const;
+
+/**
+ * A single aggregate term inside a {@link WordCloudBroadcast}. Carries ONLY the
+ * normalised term and its visible frequency — never a `participant_identifier`
+ * or any personal data (Req 8.6, 8.20).
+ */
+export interface WordCloudBroadcastTerm {
+  readonly term: string;
+  readonly frequency: number;
+}
+
+/**
+ * The privacy-safe word-cloud Broadcast payload emitted by
+ * `broadcast_word_cloud` on the per-event topic `event:{event_id}:wordcloud`
+ * (event `word_cloud`), as documented in migration
+ * `20260101000028_word_cloud_moderation_rpc.sql`. It carries ONLY the RAW
+ * VISIBLE aggregate term/frequency pairs and the ids needed to route it —
+ * never a `participant_identifier` or any personal data (Req 8.6, 8.20).
+ * Stop-word exclusion and monotonic sizing are applied client-side via
+ * `aggregateWordCloud()` / `sizeForFrequency()`.
+ */
+export interface WordCloudBroadcast {
+  readonly event_id: string;
+  readonly prompt_id: string;
+  readonly terms: readonly WordCloudBroadcastTerm[];
+}
+
+/** Callbacks the audience word-cloud surface supplies to {@link subscribeToWordCloud}. */
+export interface WordCloudSubscriptionHandlers {
+  /**
+   * Called with the aggregate {@link WordCloudBroadcast} on each `word_cloud`
+   * Broadcast message for THIS event (Req 6.15, 23.1). The payload is
+   * privacy-safe (no `participant_identifier`); the consumer filters to the
+   * prompt it is displaying.
+   */
+  readonly onWordCloud?: (payload: WordCloudBroadcast) => void;
+  /**
+   * Called with `true` when the live connection is interrupted (channel error /
+   * timeout / close) and `false` when it (re)subscribes, so the consumer can
+   * show/clear the reconnecting indicator and drive its backoff (Req 23.5–23.7).
+   */
+  readonly onConnectionChange?: (interrupted: boolean) => void;
+}
+
+/** Handle returned by {@link subscribeToWordCloud}; call it to unsubscribe. */
+export type WordCloudUnsubscribe = () => void;
+
+/**
+ * Type guard narrowing an untyped Supabase row to {@link VisibleWordCloudResponse}.
+ * Rejects anything not well-formed so a malformed row can never crash the
+ * consuming component. Never inspects/accepts participant data.
+ */
+function isVisibleWordCloudResponse(
+  value: unknown,
+): value is VisibleWordCloudResponse {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.normalised_text === 'string' && typeof v.is_hidden === 'boolean'
+  );
+}
+
+/**
+ * Narrows an untyped Broadcast payload to a {@link WordCloudBroadcast}. Anything
+ * malformed (missing ids, non-array/invalid terms) is rejected so a bad message
+ * can never crash the consuming component (mirrors `isPollResultsBroadcast`).
+ */
+function isWordCloudBroadcast(value: unknown): value is WordCloudBroadcast {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.event_id !== 'string' ||
+    typeof v.prompt_id !== 'string' ||
+    !Array.isArray(v.terms)
+  ) {
+    return false;
+  }
+  return v.terms.every((term) => {
+    if (typeof term !== 'object' || term === null) return false;
+    const t = term as Record<string, unknown>;
+    return (
+      typeof t.term === 'string' &&
+      typeof t.frequency === 'number' &&
+      Number.isFinite(t.frequency)
+    );
+  });
+}
+
+/**
+ * Reads the VISIBLE word-cloud responses for a prompt through the anonymous
+ * browser client, for the audience visualisation's initial render (Req 6.13,
+ * 6.15, 8.6).
+ *
+ * PRIVACY (Req 2.5, 8.6): selects ONLY `normalised_text` + `is_hidden` — NEVER
+ * `participant_identifier`. RLS (…000022) additionally restricts anon reads to
+ * non-hidden rows on a live event, so hidden entries never reach the client;
+ * the returned rows are still safe to pass straight to `aggregateWordCloud()`,
+ * which excludes any `is_hidden === true` row as the single source of truth
+ * (Req 6.13).
+ *
+ * Returns the raw per-response rows (NOT yet aggregated) so the caller can feed
+ * them through the pure `aggregateWordCloud()` (which applies stop-word
+ * exclusion + monotonic sizing). This never throws for "no responses"; it
+ * returns `[]`. A transport/query error is surfaced as a thrown
+ * {@link WordCloudClientError} so the card can render its error state.
+ *
+ * @param promptId The prompt whose visible responses to read.
+ * @returns The visible responses (possibly empty).
+ * @throws {WordCloudClientError} on a transport/query failure.
+ */
+export async function readVisibleResponses(
+  promptId: string,
+): Promise<VisibleWordCloudResponse[]> {
+  if (!promptId) return [];
+
+  const { data, error } = await supabase
+    .from('word_cloud_responses')
+    .select(WORD_CLOUD_RESPONSE_COLUMNS)
+    .eq('prompt_id', promptId)
+    // Defence-in-depth alongside RLS: never even ask for hidden rows.
+    .eq('is_hidden', false);
+
+  if (error) {
+    throw new WordCloudClientError(
+      'The word cloud could not be loaded. Please check your connection and try again.',
+      { kind: 'unknown', cause: error },
+    );
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+  // Drop anything malformed; keep only the privacy-safe projection.
+  return rows.filter(isVisibleWordCloudResponse);
+}
+
+/**
+ * Opens a Supabase Realtime channel scoped to a SINGLE event and wires it to the
+ * word-cloud aggregate handlers (Req 6.15, 23.1, 23.2). It subscribes ONLY to
+ * the per-event word-cloud Broadcast topic `event:{event_id}:wordcloud` (event
+ * `word_cloud`) — the fan-out produced by `broadcast_word_cloud`
+ * (…000028_word_cloud_moderation_rpc.sql). The payload is the privacy-safe RAW
+ * VISIBLE aggregate term/frequency pairs (no `participant_identifier`, Req 8.6);
+ * stop-word exclusion and monotonic sizing are applied client-side via
+ * `aggregateWordCloud()` / `sizeForFrequency()`.
+ *
+ * Connection-state transitions drive `onConnectionChange` so the consumer can
+ * surface a reconnecting indicator and drive an exponential-backoff resubscribe
+ * (Req 23.5–23.7). This keeps the consuming component free of any direct
+ * Supabase import (mirrors {@link subscribeToPollResults}).
+ *
+ * SCOPE INVARIANT (Req 23.2): the channel NEVER subscribes to the full dataset —
+ * the Broadcast topic is pinned to `eventId`. A falsy `eventId` yields a no-op
+ * unsubscribe (nothing is opened).
+ *
+ * @returns an unsubscribe function that removes the channel.
+ */
+export function subscribeToWordCloud(
+  eventId: string,
+  handlers: WordCloudSubscriptionHandlers,
+): WordCloudUnsubscribe {
+  // Never open a full-dataset / unscoped channel: an absent event id is a no-op.
+  if (!eventId) {
+    return () => {};
+  }
+
+  const channel = supabase
+    // The channel name IS the Broadcast topic the RPC emits on
+    // (`event:{event_id}:wordcloud`), pinned to this single event (Req 23.2).
+    .channel(`event:${eventId}:wordcloud`)
+    .on(
+      'broadcast',
+      { event: 'word_cloud' },
+      (message: { payload?: unknown }) => {
+        const payload = (message as { payload?: unknown })?.payload;
+        // Defensively re-scope to this event id and drop malformed messages.
+        if (isWordCloudBroadcast(payload) && payload.event_id === eventId) {
+          handlers.onWordCloud?.(payload);
+        }
+      },
+    )
+    .subscribe((state: string) => {
+      // Drive the reconnect UX (Req 23.5–23.7): flag an interruption on any
+      // non-subscribed transport state; clear it once (re)subscribed.
+      if (state === 'SUBSCRIBED') {
+        handlers.onConnectionChange?.(false);
+      } else if (
+        state === 'CHANNEL_ERROR' ||
+        state === 'TIMED_OUT' ||
+        state === 'CLOSED'
+      ) {
+        handlers.onConnectionChange?.(true);
+      }
+    });
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}

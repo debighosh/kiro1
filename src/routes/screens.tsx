@@ -17,9 +17,17 @@ import {
   subscribeToPresenter,
   type PresenterActivePoll,
   type PresenterMode,
+  type PresenterPollResultsPayload,
   type PresenterQuestion,
+  type PresenterWordCloudPayload,
 } from '../lib/presenter';
-import { aggregateWordCloud, type WordCloudTerm } from '../lib/wordcloud';
+import {
+  aggregateWordCloud,
+  sizeForFrequency,
+  DEFAULT_MIN_SIZE,
+  DEFAULT_MAX_SIZE,
+  type WordCloudTerm,
+} from '../lib/wordcloud';
 import { EventJoinCard } from '../components/EventJoinCard';
 import { QrDisplay } from '../components/QrDisplay';
 import { QuestionSubmissionForm } from '../components/QuestionSubmissionForm';
@@ -690,6 +698,45 @@ function buildAudienceUrl(event: PublicEvent): string {
 type PresenterStatus = 'loading' | 'ready' | 'unavailable';
 
 /**
+ * Converts the PRE-AGGREGATED `{ term, frequency }` pairs carried by a
+ * `word_cloud` Broadcast (task 24.2) into the render-ready {@link WordCloudTerm}
+ * list the presenter's `word_cloud` mode shows. Unlike {@link aggregateWordCloud}
+ * — which groups RAW response rows — the broadcast payload is already grouped by
+ * the server, so we only need to assign each term its monotonic size via
+ * {@link sizeForFrequency} (Req 6.11) using the default size bounds, then sort by
+ * frequency desc (ties by term asc) for a stable, deterministic order matching
+ * {@link aggregateWordCloud}. This is a PURE function: no I/O, no mutation.
+ *
+ * `participant_identifier` never appears in the broadcast payload (Req 8.6), so
+ * nothing sensitive can flow through here.
+ */
+function termsFromWordCloudBroadcast(
+  terms: readonly { readonly term: string; readonly frequency: number }[],
+): WordCloudTerm[] {
+  // Only positive-frequency terms contribute to the rendered cloud.
+  const present = terms.filter((t) => t.frequency > 0);
+  if (present.length === 0) return [];
+
+  const frequencies = present.map((t) => t.frequency);
+  const minFreq = Math.min(...frequencies);
+  const maxFreq = Math.max(...frequencies);
+
+  return present
+    .map(({ term, frequency }) => ({
+      term,
+      frequency,
+      size: sizeForFrequency(
+        frequency,
+        minFreq,
+        maxFreq,
+        DEFAULT_MIN_SIZE,
+        DEFAULT_MAX_SIZE,
+      ),
+    }))
+    .sort((a, b) => b.frequency - a.frequency || a.term.localeCompare(b.term));
+}
+
+/**
  * `/present/:eventRef` — display-only, projector-optimised presenter view
  * (task 17.1). The {@link Presenter} layout already provides the 16:9,
  * high-contrast, ≥24px shell (Req 7.1); this component fills it with the
@@ -733,7 +780,18 @@ type PresenterStatus = 'loading' | 'ready' | 'unavailable';
  * displayed content is retained and an interruption indicator is shown
  * (Req 7.7); it clears when the connection recovers.
  *
- * Requirements traceability: 7.9, 7.6, 7.7, 7.5, 7.10, 7.4, 7.8, 5.11, 6.13.
+ * Realtime — M3 modes (task 24.2, Req 5.12, 6.15, 23.2): the same
+ * subscription ALSO wires the event-scoped poll-results and word-cloud
+ * Broadcast topics. In `poll_results` mode a `poll_results` broadcast updates
+ * the active poll's per-option `response_count` in place (within 2 s), and in
+ * `word_cloud` mode a `word_cloud` broadcast refreshes the sized terms — both
+ * WITHOUT a re-read. Consistent with the M2 modes, an interruption RETAINS the
+ * last-displayed poll/terms beneath the banner (state persists; nothing clears
+ * it on interruption), so Req 7.7's retain-last-content holds for these modes
+ * too.
+ *
+ * Requirements traceability: 7.9, 7.6, 7.7, 7.5, 7.10, 7.4, 7.8, 5.11, 5.12,
+ * 6.13, 6.15, 23.2.
  * Design: Request/data flows (Presenter mode switching); Frontend Design
  * (Route map — `/present/:eventRef`); Data Models (`presenter_mode` enum
  * values `poll_results`, `word_cloud`).
@@ -860,6 +918,43 @@ export function PresenterView(): JSX.Element {
       },
       // Retain last content + flag/clear the interruption indicator (Req 7.7).
       onConnectionChange: (isInterrupted) => setInterrupted(isInterrupted),
+      // Task 24.2 — poll-results broadcast (Req 5.12, 23.2): while in
+      // `poll_results` mode, update the ACTIVE poll's per-option
+      // `response_count` in place (within 2 s) when the broadcast targets the
+      // poll we are displaying. The functional updater reads the current poll,
+      // so we never depend on a stale closure. Retain-last-content: if the
+      // broadcast is for a different poll (or we have no poll yet), keep the
+      // previously-displayed poll untouched (Req 7.7).
+      onPollResults: (payload: PresenterPollResultsPayload) => {
+        if (mode !== 'poll_results') return;
+        setPoll((prev) => {
+          if (!prev || prev.id !== payload.poll_id) return prev;
+          // Map each broadcast option's response_count onto the matching option
+          // (retaining option text/order); options not in the payload keep
+          // their last-known count.
+          const counts = new Map(
+            payload.options.map((o) => [o.option_id, o.response_count]),
+          );
+          return {
+            ...prev,
+            options: prev.options.map((option) =>
+              counts.has(option.id)
+                ? { ...option, response_count: counts.get(option.id) as number }
+                : option,
+            ),
+          };
+        });
+      },
+      // Task 24.2 — word-cloud broadcast (Req 6.15, 23.2): while in
+      // `word_cloud` mode, refresh the sized terms from the pre-aggregated
+      // broadcast payload (within 2 s). Retain-last-content: an empty payload
+      // keeps the previously-displayed terms rather than blanking the screen
+      // (Req 7.7), mirroring the featured/top modes' `next ?? prev` pattern.
+      onWordCloud: (payload: PresenterWordCloudPayload) => {
+        if (mode !== 'word_cloud') return;
+        const next = termsFromWordCloudBroadcast(payload.terms);
+        setWordCloudTerms((prev) => (next.length > 0 ? next : prev));
+      },
     });
 
     return unsubscribe;

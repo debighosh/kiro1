@@ -10,10 +10,23 @@
  * `../lib/wordCloudClient`); the UI validation here is fast-feedback /
  * defence-in-depth only.
  *
- * SCOPE (Task 23.3 ONLY): this is the RESPONSE + client-side normalised PREVIEW
- * surface. It deliberately does NOT render the aggregated word-cloud
- * visualisation — that is task 23.4. A clearly-marked mount point is left below
- * for 23.4 to attach the visualisation.
+ * SCOPE: this card owns BOTH the RESPONSE + client-side normalised PREVIEW
+ * surface (task 23.3) AND the aggregated word-cloud VISUALISATION with
+ * monotonic sizing + live updates (task 23.4).
+ *
+ * VISUALISATION (Task 23.4, Req 6.11, 6.13, 6.14, 6.15, 24.5): when the prompt's
+ * results are visible to the audience — `results_visible_while_collecting` while
+ * `open`, OR a `closed` prompt — the card renders the aggregated live word
+ * cloud. Terms come from the PURE `aggregateWordCloud()` (imported from
+ * `../lib/wordcloud`), which excludes hidden entries (Req 6.13), excludes
+ * configured stop words (Req 6.14), and assigns each term a `size` that is a
+ * NON-DECREASING function of frequency (Req 6.11). The visual layout is a
+ * lightweight CSS/flexbox sized-term rendering (font-size ∝ each term's `size`);
+ * see {@link WordCloudVisualisation} for why d3-cloud is intentionally NOT used.
+ * Live updates (Req 6.15) arrive via {@link subscribeToWordCloud} on the
+ * event-scoped Broadcast topic and re-render within the 2-second target. An
+ * accessible term/frequency text list is always rendered alongside the visual
+ * cloud so screen-reader users get the data (Req 24.5).
  *
  * Live normalised preview (Req 6.10): as the participant types, the card shows
  * "will be counted as: <normalised>" using the SAME pure `normalise()` imported
@@ -50,17 +63,31 @@
  * Design references: Components (`WordCloudCard`); Request/data flows (Word
  * cloud).
  */
-import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
-import { normalise } from '../lib/wordcloud';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+} from 'react';
+import {
+  aggregateWordCloud,
+  normalise,
+  type WordCloudTerm,
+} from '../lib/wordcloud';
 import { isParticipationEligible, type EventStatus } from '../lib/participationGate';
 import {
   readActivePrompt,
+  readVisibleResponses,
   submitWordCloudResponse,
+  subscribeToWordCloud,
   WordCloudClientError,
   WORD_CLOUD_TEXT_MAX,
   WORD_CLOUD_LENGTH_MESSAGE,
   countWordCloudCodePoints,
   type WordCloudPrompt,
+  type VisibleWordCloudResponse,
 } from '../lib/wordCloudClient';
 
 /** The lifecycle of loading the active prompt + submitting a response (Req 24.7). */
@@ -84,6 +111,94 @@ export interface WordCloudCardProps {
    * Never receives any participant identity.
    */
   readonly onResponded?: () => void;
+  /**
+   * Optional stop-word / exclusion-list terms removed from the aggregated
+   * visualisation before rendering (Req 6.14). Compared using the SAME
+   * `normalise()` as responses (see `aggregateWordCloud`). For M3 this is
+   * typically omitted/empty (the `event.stop_words` wiring is a later concern);
+   * the prop exists so it is ready to be threaded through.
+   */
+  readonly stopWords?: readonly string[];
+}
+
+/**
+ * Renders the aggregated word cloud (Task 23.4).
+ *
+ * ── Why a CSS sized-term layout instead of d3-cloud ─────────────────────────
+ * The design's Technology Stack lists "d3-cloud + a lightweight React wrapper",
+ * but d3-cloud performs its layout via CANVAS text measurement, which is not
+ * reliably available in a headless/jsdom test environment and adds a native-ish
+ * dependency for no behavioural gain here. The property we actually OWN and
+ * must guarantee — MONOTONIC SIZING (Req 6.11) — lives entirely in the pure
+ * `aggregateWordCloud()` / `sizeForFrequency()` in `src/lib/wordcloud.ts`. So we
+ * realise the cloud as a deterministic, canvas-free CSS/flexbox layout where
+ * each term's `font-size` is exactly its computed `size`. This satisfies the
+ * monotonic-sizing guarantee visibly (larger frequency ⇒ never-smaller text),
+ * is testable without canvas, and avoids installing d3-cloud.
+ *
+ * ── Accessibility (Req 24.5) ────────────────────────────────────────────────
+ * The visual cloud is `aria-hidden` (it conveys via size, which AT cannot
+ * perceive), and a companion `<ul>` lists every term with its frequency so
+ * screen-reader users get the same data. Emphasis is via SIZE + TEXT, never
+ * colour alone (Req 24.9).
+ */
+function WordCloudVisualisation({
+  terms,
+  emptyMessage,
+}: {
+  readonly terms: readonly WordCloudTerm[];
+  readonly emptyMessage: string;
+}): JSX.Element {
+  if (terms.length === 0) {
+    return (
+      <p
+        role="status"
+        aria-live="polite"
+        className="text-ink-muted"
+        data-testid="word-cloud-visual-empty"
+      >
+        {emptyMessage}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2" data-testid="word-cloud-visual">
+      {/*
+        Visual cloud: font-size = the term's monotonic `size` (Req 6.11).
+        aria-hidden because it conveys meaning via size, which AT cannot read;
+        the accessible list below carries the data (Req 24.5).
+      */}
+      <div
+        aria-hidden={true}
+        className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+        data-testid="word-cloud-terms"
+      >
+        {terms.map((term) => (
+          <span
+            key={term.term}
+            className="font-medium leading-none text-ink"
+            style={{ fontSize: `${term.size}px` }}
+            data-testid="word-cloud-term"
+            data-term={term.term}
+            data-frequency={term.frequency}
+            data-size={term.size}
+          >
+            {term.term}
+          </span>
+        ))}
+      </div>
+
+      {/* Accessible term/frequency list (Req 24.5): the AT-perceivable data. */}
+      <ul className="sr-only" data-testid="word-cloud-term-list">
+        {terms.map((term) => (
+          <li key={term.term}>
+            {term.term}: {term.frequency}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /**
@@ -102,6 +217,7 @@ export function WordCloudCard({
   eventId,
   eventStatus = 'live',
   onResponded,
+  stopWords,
 }: WordCloudCardProps): JSX.Element {
   // Stable, unique ids so labels/descriptions associate even with multiple
   // instances (Req 24.5).
@@ -117,6 +233,12 @@ export function WordCloudCard({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // The raw VISIBLE responses backing the aggregated cloud (task 23.4). Seeded
+  // by the initial read and replaced on each realtime broadcast; fed through the
+  // pure `aggregateWordCloud()` so hidden-entry + stop-word exclusion and
+  // monotonic sizing live in one place (Req 6.11, 6.13, 6.14).
+  const [responses, setResponses] = useState<VisibleWordCloudResponse[]>([]);
 
   // Load the active prompt for the event. A transport failure surfaces the
   // error state; "no active prompt" is the empty state (prompt === null).
@@ -142,6 +264,89 @@ export function WordCloudCard({
   const eventLive = isParticipationEligible(eventStatus);
   const promptOpen = prompt?.status === 'open';
   const inputEnabled = eventLive && promptOpen;
+
+  // Results visibility (Req 6.15): the aggregated cloud is shown to the audience
+  // when the prompt is `closed` (final results) OR while `open` AND the host has
+  // enabled `results_visible_while_collecting`. Otherwise a placeholder is shown.
+  const resultsVisible =
+    prompt !== null &&
+    (prompt.status === 'closed' ||
+      (prompt.status === 'open' && prompt.results_visible_while_collecting));
+
+  // Initial read of the visible responses whenever the visible prompt changes,
+  // so the cloud renders immediately (before any broadcast arrives). Guarded by
+  // `resultsVisible` so we never read when results are withheld. A read failure
+  // is non-fatal to the response surface: the cloud simply stays empty.
+  useEffect(() => {
+    if (!resultsVisible || !prompt) {
+      setResponses([]);
+      return;
+    }
+    let cancelled = false;
+    const promptId = prompt.id;
+    void (async () => {
+      try {
+        const rows = await readVisibleResponses(promptId);
+        if (!cancelled) setResponses(rows);
+      } catch {
+        // Non-fatal: leave the cloud empty; a subsequent broadcast/read may fill it.
+        if (!cancelled) setResponses([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resultsVisible, prompt]);
+
+  // Live updates (Req 6.15, 23.1, 23.2): subscribe to the event-scoped word-cloud
+  // Broadcast topic while results are visible. The broadcast carries the RAW
+  // visible { term, frequency } pairs; we map them back into response-like rows
+  // (one per occurrence) and let `aggregateWordCloud()` re-apply the SAME
+  // normalise()/stop-word exclusion + monotonic sizing client-side — so the
+  // broadcast path and the read path share one aggregation contract. This avoids
+  // an extra read round-trip on every moderation change.
+  useEffect(() => {
+    if (!resultsVisible || !prompt) return;
+    const promptId = prompt.id;
+    const unsubscribe = subscribeToWordCloud(eventId, {
+      onWordCloud: (payload) => {
+        if (payload.prompt_id !== promptId) return;
+        const expanded: VisibleWordCloudResponse[] = [];
+        for (const { term, frequency } of payload.terms) {
+          const count = Math.max(0, Math.floor(frequency));
+          for (let i = 0; i < count; i += 1) {
+            expanded.push({ normalised_text: term, is_hidden: false });
+          }
+        }
+        setResponses(expanded);
+      },
+    });
+    return unsubscribe;
+  }, [resultsVisible, prompt, eventId]);
+
+  // Aggregate the current responses into monotonically-sized terms (Req 6.11,
+  // 6.13, 6.14). Memoised so re-renders don't re-aggregate needlessly.
+  const terms = useMemo(
+    () => aggregateWordCloud(responses, { stopWords }),
+    [responses, stopWords],
+  );
+
+  // The shared visualisation node, rendered at whichever mount point applies.
+  const visualisation = resultsVisible ? (
+    <WordCloudVisualisation
+      terms={terms}
+      emptyMessage="No responses yet. Be the first to add a word!"
+    />
+  ) : (
+    <p
+      role="status"
+      aria-live="polite"
+      className="text-ink-muted"
+      data-testid="word-cloud-results-placeholder"
+    >
+      Results will appear when the host shares them.
+    </p>
+  );
 
   const codePointCount = countWordCloudCodePoints(text);
   const overLimit = codePointCount > WORD_CLOUD_TEXT_MAX;
@@ -222,11 +427,12 @@ export function WordCloudCard({
         </p>
 
         {/*
-          MOUNT POINT (task 23.4): the aggregated word-cloud visualisation is
-          rendered here. It may be shown for a `closed` prompt or (when
-          `results_visible_while_collecting` is true) while `open`. Task 23.3
-          intentionally does NOT render it.
+          MOUNT POINT (task 23.4): the aggregated word-cloud visualisation.
+          Shown for a `closed` prompt (final results) here since the input is
+          withheld; otherwise the results placeholder. Only rendered when a
+          prompt exists.
         */}
+        {prompt ? visualisation : null}
       </section>
     );
   }
@@ -341,11 +547,12 @@ export function WordCloudCard({
       </form>
 
       {/*
-        MOUNT POINT (task 23.4): the aggregated word-cloud visualisation is
-        rendered here (e.g. when `prompt.results_visible_while_collecting` is
-        true while the prompt is open). Task 23.3 is the RESPONSE + preview
-        surface only and intentionally does NOT render the visualisation.
+        MOUNT POINT (task 23.4): the aggregated word-cloud visualisation,
+        rendered here below the response form when the prompt is `open` and
+        `results_visible_while_collecting` is true; otherwise the results
+        placeholder ("Results will appear when the host shares them.").
       */}
+      {visualisation}
     </section>
   );
 }

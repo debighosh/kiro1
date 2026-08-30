@@ -196,6 +196,117 @@ export async function readFeaturedQuestion(
   return data;
 }
 
+// ============================================================================
+// Task 24.2 — event-scoped poll-results + word-cloud broadcast payloads.
+// ============================================================================
+//
+// In addition to the M2 `events`/`questions` postgres_changes above, the
+// presenter's Milestone-3 `poll_results` and `word_cloud` modes need the live
+// aggregate tallies to update within the 2-second delivery target (Req 5.12,
+// 6.15, 23.2) WITHOUT a manual refresh. Those aggregates arrive on the SAME two
+// event-scoped Broadcast topics the audience surfaces subscribe to
+// (`subscribeToPollResults` in `../lib/polls`; the word-cloud broadcast in
+// migration …000028):
+//
+//   * topic `event:{event_id}:polls`, event `poll_results`, payload
+//     `{ event_id, poll_id, options: [{ option_id, response_count }] }`
+//     (migration …000029_poll_broadcast.sql);
+//   * topic `event:{event_id}:wordcloud`, event `word_cloud`, payload
+//     `{ event_id, prompt_id, terms: [{ term, frequency }] }`
+//     (migration …000028_word_cloud_moderation_rpc.sql).
+//
+// Both payloads are privacy-safe aggregates — NEVER a `participant_identifier`
+// (Req 8.6, 20). Because a Supabase Broadcast is delivered to the channel whose
+// NAME equals the emitted topic, these two bindings live on their OWN channels
+// (named after each topic), NOT on the `presenter:{eventId}` postgres_changes
+// channel; `subscribeToPresenter` opens all three and returns a single
+// unsubscribe that tears them all down.
+
+/** A single per-option tally inside a {@link PresenterPollResultsPayload}. */
+export interface PresenterPollResultsOption {
+  readonly option_id: string;
+  readonly response_count: number;
+}
+
+/**
+ * The privacy-safe poll-results Broadcast payload the presenter receives on the
+ * per-event topic `event:{event_id}:polls` (event `poll_results`), emitted by
+ * the poll-response RPC (migration …000029). Carries ONLY the aggregate
+ * per-option counts + routing ids — never a `participant_identifier` (Req 8.6).
+ */
+export interface PresenterPollResultsPayload {
+  readonly event_id: string;
+  readonly poll_id: string;
+  readonly options: readonly PresenterPollResultsOption[];
+}
+
+/** A single aggregated term inside a {@link PresenterWordCloudPayload}. */
+export interface PresenterWordCloudTermPayload {
+  readonly term: string;
+  readonly frequency: number;
+}
+
+/**
+ * The privacy-safe word-cloud Broadcast payload the presenter receives on the
+ * per-event topic `event:{event_id}:wordcloud` (event `word_cloud`), emitted by
+ * the word-cloud response/moderation path (migration …000028). Carries ONLY the
+ * visible aggregate term/frequency pairs + routing ids — never a
+ * `participant_identifier` (Req 8.6).
+ */
+export interface PresenterWordCloudPayload {
+  readonly event_id: string;
+  readonly prompt_id: string;
+  readonly terms: readonly PresenterWordCloudTermPayload[];
+}
+
+/** Narrows an untyped Broadcast payload to {@link PresenterPollResultsPayload}. */
+function isPresenterPollResultsPayload(
+  value: unknown,
+): value is PresenterPollResultsPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.event_id !== 'string' ||
+    typeof v.poll_id !== 'string' ||
+    !Array.isArray(v.options)
+  ) {
+    return false;
+  }
+  return v.options.every((option) => {
+    if (typeof option !== 'object' || option === null) return false;
+    const o = option as Record<string, unknown>;
+    return (
+      typeof o.option_id === 'string' &&
+      typeof o.response_count === 'number' &&
+      Number.isFinite(o.response_count)
+    );
+  });
+}
+
+/** Narrows an untyped Broadcast payload to {@link PresenterWordCloudPayload}. */
+function isPresenterWordCloudPayload(
+  value: unknown,
+): value is PresenterWordCloudPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.event_id !== 'string' ||
+    typeof v.prompt_id !== 'string' ||
+    !Array.isArray(v.terms)
+  ) {
+    return false;
+  }
+  return v.terms.every((term) => {
+    if (typeof term !== 'object' || term === null) return false;
+    const t = term as Record<string, unknown>;
+    return (
+      typeof t.term === 'string' &&
+      typeof t.frequency === 'number' &&
+      Number.isFinite(t.frequency)
+    );
+  });
+}
+
 /**
  * Callbacks the presenter view supplies to {@link subscribeToPresenter}.
  */
@@ -218,6 +329,22 @@ export interface PresenterSubscriptionHandlers {
    * indicator while retaining the last content (Req 7.7).
    */
   readonly onConnectionChange: (interrupted: boolean) => void;
+  /**
+   * OPTIONAL (task 24.2). Called with the privacy-safe aggregate
+   * {@link PresenterPollResultsPayload} on each `poll_results` Broadcast for
+   * THIS event, so the `poll_results` mode can update the per-option tallies
+   * within the 2-second target (Req 5.12, 23.2) without a re-read. Payload is
+   * defensively re-scoped to this event; malformed messages are dropped.
+   */
+  readonly onPollResults?: (payload: PresenterPollResultsPayload) => void;
+  /**
+   * OPTIONAL (task 24.2). Called with the privacy-safe aggregate
+   * {@link PresenterWordCloudPayload} on each `word_cloud` Broadcast for THIS
+   * event, so the `word_cloud` mode can refresh the sized terms within the
+   * 2-second target (Req 6.15, 23.2) without a re-read. Payload is defensively
+   * re-scoped to this event; malformed messages are dropped.
+   */
+  readonly onWordCloud?: (payload: PresenterWordCloudPayload) => void;
 }
 
 /** Handle returned by {@link subscribeToPresenter}; call it to unsubscribe. */
@@ -236,7 +363,19 @@ export type PresenterUnsubscribe = () => void;
  * (Req 7.7). This keeps the presenter view free of any direct Supabase import,
  * so it can be unit-tested by mocking `../lib/presenter` alone.
  *
- * @returns an unsubscribe function that removes the channel.
+ * Task 24.2 — Milestone-3 realtime: when the OPTIONAL `onPollResults` /
+ * `onWordCloud` handlers are supplied, this ALSO opens the two event-scoped
+ * Broadcast topics the M3 presenter modes need — `event:{eventId}:polls`
+ * (event `poll_results`) and `event:{eventId}:wordcloud` (event `word_cloud`) —
+ * so the `poll_results` / `word_cloud` modes update within the 2-second target
+ * (Req 5.12, 6.15, 23.2). These are SEPARATE channels (a Supabase Broadcast is
+ * delivered on the channel whose NAME equals the emitted topic, so they cannot
+ * ride on the `presenter:{eventId}` postgres_changes channel). Only the primary
+ * channel's transport state drives `onConnectionChange`, so the M2 interruption
+ * UX (Req 7.7) is unchanged and the last-good content is retained beneath the
+ * banner. All channels are torn down by the returned unsubscribe.
+ *
+ * @returns an unsubscribe function that removes every opened channel.
  */
 export function subscribeToPresenter(
   eventId: string,
@@ -283,8 +422,63 @@ export function subscribeToPresenter(
       }
     });
 
+  // Track every channel opened so the returned unsubscribe tears them ALL down.
+  const channels = [channel];
+
+  // Task 24.2: only open the M3 poll-results Broadcast channel when the view
+  // supplies the handler (keeps the M2 behaviour and its tests unchanged when
+  // the optional handler is absent). The channel name IS the topic the RPC
+  // emits on (`event:{eventId}:polls`); the payload is a privacy-safe aggregate
+  // (no participant_identifier, Req 8.6) which we re-scope to this event.
+  const onPollResults = handlers.onPollResults;
+  if (onPollResults) {
+    const pollChannel = supabase
+      .channel(`event:${eventId}:polls`)
+      .on(
+        'broadcast',
+        { event: 'poll_results' },
+        (message: { payload?: unknown }) => {
+          const payload = message?.payload;
+          if (
+            isPresenterPollResultsPayload(payload) &&
+            payload.event_id === eventId
+          ) {
+            onPollResults(payload);
+          }
+        },
+      )
+      .subscribe();
+    channels.push(pollChannel);
+  }
+
+  // Task 24.2: likewise the word-cloud Broadcast channel — topic
+  // `event:{eventId}:wordcloud`, event `word_cloud`, privacy-safe aggregate
+  // term/frequency payload (Req 8.6), re-scoped to this event.
+  const onWordCloud = handlers.onWordCloud;
+  if (onWordCloud) {
+    const wordCloudChannel = supabase
+      .channel(`event:${eventId}:wordcloud`)
+      .on(
+        'broadcast',
+        { event: 'word_cloud' },
+        (message: { payload?: unknown }) => {
+          const payload = message?.payload;
+          if (
+            isPresenterWordCloudPayload(payload) &&
+            payload.event_id === eventId
+          ) {
+            onWordCloud(payload);
+          }
+        },
+      )
+      .subscribe();
+    channels.push(wordCloudChannel);
+  }
+
   return () => {
-    void supabase.removeChannel(channel);
+    for (const ch of channels) {
+      void supabase.removeChannel(ch);
+    }
   };
 }
 

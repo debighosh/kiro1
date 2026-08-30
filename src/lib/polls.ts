@@ -337,3 +337,175 @@ export async function submitPollResponse(
     throw toPollError(error);
   }
 }
+
+
+// ============================================================================
+// Event-scoped realtime subscription for the audience poll RESULTS surface
+// (Task 23.2 — Decision D9).
+//
+// The visibility-aware poll-results surface ({@link PollCard} results mount,
+// task 23.2) needs the per-option tallies to update within the 2-second
+// delivery target (Req 5.11, 5.12, 23.1) WITHOUT a manual refresh, while
+// keeping the subscription scope NARROW — a single event, never the full
+// dataset (Req 23.2). This helper mirrors {@link subscribeToEventQuestions} in
+// `../lib/questions` but wires ONLY the poll-results Broadcast fan-out.
+//
+// It subscribes to the per-event Broadcast topic `event:{event_id}:polls`,
+// event `poll_results`, produced by the poll-response RPC
+// (migration 20260101000029_poll_broadcast.sql). The payload is the
+// privacy-safe aggregate `{ event_id, poll_id, options: [{ option_id,
+// response_count }] }` — it carries NO `participant_identifier` (Req 8.6, 20).
+//
+// VISIBILITY (Req 5.11): the broadcast always carries the RAW current tallies.
+// The subscriber (PollCard) applies the `hide_until_closed` display gating; the
+// broadcast/subscription layer never encodes visibility (see the VISIBILITY
+// NOTE in the migration header).
+//
+// Connection-state transitions drive `onConnectionChange` so the consumer can
+// surface a reconnecting indicator and drive its exponential-backoff
+// resubscribe (Req 23.5–23.7), keeping the consuming component free of any
+// direct Supabase import.
+//
+// SCOPE INVARIANT (Req 23.2): the channel NEVER subscribes to the full dataset —
+// the Broadcast topic is pinned to this single `eventId`. A falsy `eventId`
+// yields a no-op unsubscribe (nothing is opened).
+//
+// Requirements traceability: 5.11, 5.12, 23.1, 23.2, 8.6.
+// Design references: Frontend Design (Realtime subscription strategy); Decision
+// D9; Request/data flows (Poll lifecycle — Realtime when visible).
+// ============================================================================
+
+/**
+ * The per-option aggregate tally carried inside a {@link PollResultsBroadcast}.
+ * Carries ONLY the option id and its response count — never a
+ * `participant_identifier` or any personal data (Req 8.6, 20).
+ */
+export interface PollResultsBroadcastOption {
+  readonly option_id: string;
+  readonly response_count: number;
+}
+
+/**
+ * The privacy-safe poll-results Broadcast payload emitted by the poll-response
+ * RPC on the per-event topic `event:{event_id}:polls` (event `poll_results`),
+ * as documented in migration `20260101000029_poll_broadcast.sql`. It carries
+ * ONLY the aggregate per-option counts and the ids needed to route it — never a
+ * `participant_identifier` or any personal data (Req 8.6, 20). The `options`
+ * array is ordered by `display_order` on the server.
+ */
+export interface PollResultsBroadcast {
+  readonly event_id: string;
+  readonly poll_id: string;
+  readonly options: readonly PollResultsBroadcastOption[];
+}
+
+/**
+ * Callbacks the audience poll-results surface supplies to
+ * {@link subscribeToPollResults}.
+ */
+export interface PollResultsSubscriptionHandlers {
+  /**
+   * Called with the aggregate {@link PollResultsBroadcast} on each
+   * `poll_results` Broadcast message for THIS event (Decision D9; Req 5.11,
+   * 5.12, 23.1). The payload is privacy-safe (no `participant_identifier`); the
+   * consumer filters to the poll(s) it is displaying.
+   */
+  readonly onPollResults?: (payload: PollResultsBroadcast) => void;
+  /**
+   * Called with `true` when the live connection is interrupted (channel error /
+   * timeout / close) and `false` when it (re)subscribes, so the consumer can
+   * show/clear the reconnecting indicator and drive its backoff (Req 23.5–23.7).
+   */
+  readonly onConnectionChange?: (interrupted: boolean) => void;
+}
+
+/** Handle returned by {@link subscribeToPollResults}; call it to unsubscribe. */
+export type PollResultsUnsubscribe = () => void;
+
+/**
+ * Narrows an untyped Broadcast payload to a {@link PollResultsBroadcast}.
+ * Anything malformed (missing ids, non-array/invalid options) is rejected so a
+ * bad message can never crash the consuming component.
+ */
+function isPollResultsBroadcast(value: unknown): value is PollResultsBroadcast {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.event_id !== 'string' ||
+    typeof v.poll_id !== 'string' ||
+    !Array.isArray(v.options)
+  ) {
+    return false;
+  }
+  return v.options.every((option) => {
+    if (typeof option !== 'object' || option === null) return false;
+    const o = option as Record<string, unknown>;
+    return (
+      typeof o.option_id === 'string' &&
+      typeof o.response_count === 'number' &&
+      Number.isFinite(o.response_count)
+    );
+  });
+}
+
+/**
+ * Opens a Supabase Realtime channel scoped to a SINGLE event and wires it to the
+ * poll-results handlers (Req 5.11, 5.12, 23.1, 23.2). It subscribes ONLY to the
+ * per-event poll-results Broadcast topic `event:{event_id}:polls` (event
+ * `poll_results`) — the D9 fan-out produced by the poll-response RPC. The
+ * payload is the privacy-safe aggregate per-option tallies (no
+ * `participant_identifier`, Req 8.6).
+ *
+ * Connection-state transitions drive `onConnectionChange` so the consumer can
+ * surface a reconnecting indicator and drive an exponential-backoff resubscribe
+ * (Req 23.5–23.7). This keeps the consuming component free of any direct
+ * Supabase import (mirrors {@link subscribeToEventQuestions}).
+ *
+ * SCOPE INVARIANT (Req 23.2): the channel NEVER subscribes to the full dataset —
+ * the Broadcast topic is pinned to `eventId`. A falsy `eventId` yields a no-op
+ * unsubscribe (nothing is opened).
+ *
+ * @returns an unsubscribe function that removes the channel.
+ */
+export function subscribeToPollResults(
+  eventId: string,
+  handlers: PollResultsSubscriptionHandlers,
+): PollResultsUnsubscribe {
+  // Never open a full-dataset / unscoped channel: an absent event id is a no-op.
+  if (!eventId) {
+    return () => {};
+  }
+
+  const channel = supabase
+    // The channel name IS the Broadcast topic the RPC emits on
+    // (`event:{event_id}:polls`), pinned to this single event (Req 23.2).
+    .channel(`event:${eventId}:polls`)
+    .on(
+      'broadcast',
+      { event: 'poll_results' },
+      (message: { payload?: unknown }) => {
+        const payload = (message as { payload?: unknown })?.payload;
+        // Defensively re-scope to this event id and drop malformed messages.
+        if (isPollResultsBroadcast(payload) && payload.event_id === eventId) {
+          handlers.onPollResults?.(payload);
+        }
+      },
+    )
+    .subscribe((state: string) => {
+      // Drive the reconnect UX (Req 23.5–23.7): flag an interruption on any
+      // non-subscribed transport state; clear it once (re)subscribed.
+      if (state === 'SUBSCRIBED') {
+        handlers.onConnectionChange?.(false);
+      } else if (
+        state === 'CHANNEL_ERROR' ||
+        state === 'TIMED_OUT' ||
+        state === 'CLOSED'
+      ) {
+        handlers.onConnectionChange?.(true);
+      }
+    });
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
