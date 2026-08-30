@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useState,
-  type FormEvent,
-} from 'react';
+import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AdminAuthError,
@@ -227,7 +221,10 @@ function LiveQaSection({ eventId }: { eventId: string }): JSX.Element {
           itself when `refreshSignal` changes (driven by realtime updates). */}
       <div data-testid="qa-mount-point" className="mt-4 flex flex-col gap-6">
         <QuestionSubmissionForm eventId={eventId} />
-        <QuestionListAndVoting eventId={eventId} refreshSignal={refreshSignal} />
+        <QuestionListAndVoting
+          eventId={eventId}
+          refreshSignal={refreshSignal}
+        />
       </div>
     </div>
   );
@@ -365,7 +362,10 @@ export function EventView(): JSX.Element {
         {/* Current active interaction (Req 2.6). */}
         <p className="text-ink-muted">
           Now showing:{' '}
-          <span data-testid="active-interaction" className="font-medium text-ink">
+          <span
+            data-testid="active-interaction"
+            className="font-medium text-ink"
+          >
             {activeLabel}
           </span>
         </p>
@@ -888,7 +888,10 @@ export function PresenterView(): JSX.Element {
           />
           <p className="text-3xl">
             Join at your device with code{' '}
-            <span data-testid="presenter-event-code" className="font-mono font-bold">
+            <span
+              data-testid="presenter-event-code"
+              className="font-mono font-bold"
+            >
               {event.slug ?? event.id}
             </span>
           </p>
@@ -909,9 +912,7 @@ export function PresenterView(): JSX.Element {
               {featured.text}
             </blockquote>
           ) : (
-            <p className="text-3xl text-white/80">
-              No featured question yet.
-            </p>
+            <p className="text-3xl text-white/80">No featured question yet.</p>
           )}
         </section>
       ) : mode === 'top_questions' ? (
@@ -919,7 +920,9 @@ export function PresenterView(): JSX.Element {
           data-testid="presenter-top"
           className="flex w-full flex-col items-center gap-6"
         >
-          <h2 className="text-3xl font-semibold text-white/80">Top questions</h2>
+          <h2 className="text-3xl font-semibold text-white/80">
+            Top questions
+          </h2>
           {questions.length > 0 ? (
             <ol className="flex w-full max-w-5xl flex-col gap-4 text-left">
               {questions.map((q) => (

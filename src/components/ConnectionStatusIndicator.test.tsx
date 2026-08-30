@@ -21,7 +21,9 @@ import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 
 describe('ConnectionStatusIndicator', () => {
   it('renders only an sr-only status and no refresh button when connected (Req 24.5)', () => {
-    render(<ConnectionStatusIndicator status="connected" onRefresh={vi.fn()} />);
+    render(
+      <ConnectionStatusIndicator status="connected" onRefresh={vi.fn()} />,
+    );
 
     const status = screen.getByTestId('connection-status-connected');
     expect(status).toBeInTheDocument();
@@ -36,7 +38,9 @@ describe('ConnectionStatusIndicator', () => {
     const user = userEvent.setup();
     const onRefresh = vi.fn();
 
-    render(<ConnectionStatusIndicator status="reconnecting" onRefresh={onRefresh} />);
+    render(
+      <ConnectionStatusIndicator status="reconnecting" onRefresh={onRefresh} />,
+    );
 
     // Reconnecting is announced politely (role="status").
     const region = screen.getByTestId('connection-status-reconnecting');
@@ -44,7 +48,9 @@ describe('ConnectionStatusIndicator', () => {
     expect(region).toHaveAttribute('aria-live', 'polite');
     expect(region).toHaveTextContent(/reconnecting/i);
 
-    const refresh = screen.getByRole('button', { name: /refresh live updates now/i });
+    const refresh = screen.getByRole('button', {
+      name: /refresh live updates now/i,
+    });
     expect(refresh).toBeEnabled();
 
     await user.click(refresh);
@@ -64,7 +70,9 @@ describe('ConnectionStatusIndicator', () => {
     expect(region).toHaveTextContent(/unavailable/i);
 
     // Manual refresh MUST remain enabled once automatic retries stop.
-    const refresh = screen.getByRole('button', { name: /refresh live updates now/i });
+    const refresh = screen.getByRole('button', {
+      name: /refresh live updates now/i,
+    });
     expect(refresh).toBeEnabled();
 
     await user.click(refresh);

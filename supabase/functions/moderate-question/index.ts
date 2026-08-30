@@ -58,7 +58,11 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
-import { errorResponse, type FieldError, jsonResponse } from '../_shared/http.ts';
+import {
+  errorResponse,
+  type FieldError,
+  jsonResponse,
+} from '../_shared/http.ts';
 
 // -----------------------------------------------------------------------------
 // Validation contract for the moderation-mutation input.
@@ -76,7 +80,8 @@ const MODERATION_ACTIONS = ['approve', 'feature', 'answer', 'hide'] as const;
 type ModerationAction = (typeof MODERATION_ACTIONS)[number];
 
 /** Target question statuses (mirror the DB `question_status` enum values). */
-type QuestionStatus = 'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
+type QuestionStatus =
+  'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
 
 /**
  * Maps each moderation action to the target `question_status` it applies

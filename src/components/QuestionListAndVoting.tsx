@@ -171,7 +171,9 @@ export function QuestionListAndVoting({
       setVoteMessage(null);
 
       // Optimistic update: toggle voted set + nudge the displayed count.
-      setVotedIds((prev) => (currentlyVoted ? removeFrom(prev, id) : addTo(prev, id)));
+      setVotedIds((prev) =>
+        currentlyVoted ? removeFrom(prev, id) : addTo(prev, id),
+      );
       setQuestions((prev) =>
         prev.map((q) =>
           q.id === id
@@ -194,7 +196,9 @@ export function QuestionListAndVoting({
         setQuestions((prev) =>
           prev.map((q) => (q.id === id ? { ...q, vote_count: newCount } : q)),
         );
-        setVoteMessage(currentlyVoted ? 'Your vote was removed.' : 'Your vote was recorded.');
+        setVoteMessage(
+          currentlyVoted ? 'Your vote was removed.' : 'Your vote was recorded.',
+        );
       } catch (error) {
         // Roll back the optimistic changes on rejection.
         setVotedIds((prev) =>
@@ -224,7 +228,11 @@ export function QuestionListAndVoting({
   const sortSelect = useMemo(
     () => (
       <div className="flex items-center gap-2">
-        <label id={sortLabelId} htmlFor={`${sortLabelId}-select`} className="font-medium text-ink">
+        <label
+          id={sortLabelId}
+          htmlFor={`${sortLabelId}-select`}
+          className="font-medium text-ink"
+        >
           Sort questions
         </label>
         <select
@@ -252,7 +260,9 @@ export function QuestionListAndVoting({
       data-testid="question-list-and-voting"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-ink">Questions from the audience</h3>
+        <h3 className="text-base font-semibold text-ink">
+          Questions from the audience
+        </h3>
         {sortSelect}
       </div>
 

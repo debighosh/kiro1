@@ -110,16 +110,25 @@ describe('QuestionListAndVoting', () => {
 
     // Initial read used the default sort.
     await waitFor(() =>
-      expect(readAudienceQuestions).toHaveBeenCalledWith(EVENT_ID, 'most_votes'),
+      expect(readAudienceQuestions).toHaveBeenCalledWith(
+        EVENT_ID,
+        'most_votes',
+      ),
     );
     await screen.findByTestId('question-list');
 
     // Change the sort control to "Most recent".
-    await user.selectOptions(screen.getByTestId('question-sort'), 'most_recent');
+    await user.selectOptions(
+      screen.getByTestId('question-sort'),
+      'most_recent',
+    );
 
     // A re-read is issued in the chosen order.
     await waitFor(() =>
-      expect(readAudienceQuestions).toHaveBeenCalledWith(EVENT_ID, 'most_recent'),
+      expect(readAudienceQuestions).toHaveBeenCalledWith(
+        EVENT_ID,
+        'most_recent',
+      ),
     );
 
     // The rendered order reflects the returned list (q2 before q1).
@@ -136,7 +145,9 @@ describe('QuestionListAndVoting', () => {
   it('shows the friendly empty state when there are no questions (Req 24.7)', async () => {
     readAudienceQuestions.mockResolvedValue([]);
     render(<QuestionListAndVoting eventId={EVENT_ID} />);
-    expect(await screen.findByTestId('question-list-empty')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('question-list-empty'),
+    ).toBeInTheDocument();
   });
 
   it('upvote calls castQuestionVote once; toggling again calls removeQuestionVote (one-active-vote) (Req 4.1, 4.5)', async () => {
@@ -149,7 +160,9 @@ describe('QuestionListAndVoting', () => {
     await screen.findByTestId('question-list');
 
     // Cast an upvote.
-    const upvote = screen.getByRole('button', { name: /upvote this question/i });
+    const upvote = screen.getByRole('button', {
+      name: /upvote this question/i,
+    });
     await user.click(upvote);
 
     await waitFor(() => expect(castQuestionVote).toHaveBeenCalledTimes(1));
@@ -212,7 +225,9 @@ describe('QuestionListAndVoting', () => {
     render(<QuestionListAndVoting eventId={EVENT_ID} />);
     await screen.findByTestId('question-list');
 
-    await user.click(screen.getByRole('button', { name: /upvote this question/i }));
+    await user.click(
+      screen.getByRole('button', { name: /upvote this question/i }),
+    );
 
     await waitFor(() => expect(castQuestionVote).toHaveBeenCalledTimes(1));
 

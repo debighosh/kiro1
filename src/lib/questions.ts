@@ -216,7 +216,9 @@ function toQuestionError(error: { message?: string } | null): QuestionError {
  * The RPC `RETURNS questions`, so supabase-js returns the full row; we only
  * read `id` and `status`.
  */
-function isQuestionRow(value: unknown): value is { id: string; status: string } {
+function isQuestionRow(
+  value: unknown,
+): value is { id: string; status: string } {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   return typeof v.id === 'string' && typeof v.status === 'string';
@@ -246,7 +248,9 @@ export async function submitQuestion(
 
   // 1) Client-side length validation (fast feedback; the RPC re-validates).
   if (!isValidQuestionLength(text)) {
-    throw new QuestionError(QUESTION_LENGTH_MESSAGE, { kind: 'invalid_length' });
+    throw new QuestionError(QUESTION_LENGTH_MESSAGE, {
+      kind: 'invalid_length',
+    });
   }
 
   // 2) Idempotency key (reuse the caller's key on a retry) + opaque identifier.
@@ -282,7 +286,6 @@ export async function submitQuestion(
 
   return { id: row.id, status: row.status };
 }
-
 
 // ============================================================================
 // Question voting + audience list read helpers (Task 15.2).
@@ -464,10 +467,10 @@ function toVoteError(error: { message?: string } | null): QuestionError {
     );
   }
   if (raw.includes('not_eligible')) {
-    return new QuestionError(
-      'This question is no longer open for voting.',
-      { kind: 'not_eligible', cause: error },
-    );
+    return new QuestionError('This question is no longer open for voting.', {
+      kind: 'not_eligible',
+      cause: error,
+    });
   }
   if (raw.includes('question_not_found')) {
     return new QuestionError('That question could not be found.', {
@@ -563,7 +566,6 @@ export async function removeQuestionVote(questionId: string): Promise<number> {
   }
   return toVoteCount(data);
 }
-
 
 // ============================================================================
 // Event-scoped realtime subscription for the audience Q&A surface (Task 15.3).

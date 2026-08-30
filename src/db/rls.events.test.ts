@@ -68,14 +68,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * on purpose so these secrets never leak into the browser bundle.
  */
 function readTestEnv(name: string): string | undefined {
-  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  const proc = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process;
   const value = proc?.env?.[name];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
 const TEST_SUPABASE_URL = readTestEnv('TEST_SUPABASE_URL');
 const TEST_SUPABASE_ANON_KEY = readTestEnv('TEST_SUPABASE_ANON_KEY');
-const TEST_SUPABASE_SERVICE_ROLE_KEY = readTestEnv('TEST_SUPABASE_SERVICE_ROLE_KEY');
+const TEST_SUPABASE_SERVICE_ROLE_KEY = readTestEnv(
+  'TEST_SUPABASE_SERVICE_ROLE_KEY',
+);
 
 /**
  * The suite only runs when a full, real TEST Supabase configuration is present.
@@ -101,7 +105,12 @@ if (!hasLiveSupabase) {
 
 /** The four lifecycle statuses we seed, one row each. */
 type SeededStatus = 'draft' | 'live' | 'ended' | 'archived';
-const SEEDED_STATUSES: readonly SeededStatus[] = ['draft', 'live', 'ended', 'archived'];
+const SEEDED_STATUSES: readonly SeededStatus[] = [
+  'draft',
+  'live',
+  'ended',
+  'archived',
+];
 
 /**
  * Generate a >=32-char alphanumeric presenter token that satisfies the
@@ -109,7 +118,8 @@ const SEEDED_STATUSES: readonly SeededStatus[] = ['draft', 'live', 'ended', 'arc
  * the UNIQUE constraint, so we mix in randomness.
  */
 function makePresenterToken(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let token = '';
   while (token.length < 40) {
     token += alphabet[Math.floor(Math.random() * alphabet.length)];
@@ -143,188 +153,196 @@ function buildFixtures(): SeededEvent[] {
 
 // describe.skipIf keeps the suite in the report as SKIPPED (not failed / not
 // silently absent) when the live config is missing.
-describe.skipIf(!hasLiveSupabase)('events RLS behaviour (live Supabase integration)', () => {
-  // Non-null asserted: this block only runs when hasLiveSupabase is true.
-  const url = TEST_SUPABASE_URL!;
-  const anonKey = TEST_SUPABASE_ANON_KEY!;
-  const serviceKey = TEST_SUPABASE_SERVICE_ROLE_KEY!;
+describe.skipIf(!hasLiveSupabase)(
+  'events RLS behaviour (live Supabase integration)',
+  () => {
+    // Non-null asserted: this block only runs when hasLiveSupabase is true.
+    const url = TEST_SUPABASE_URL!;
+    const anonKey = TEST_SUPABASE_ANON_KEY!;
+    const serviceKey = TEST_SUPABASE_SERVICE_ROLE_KEY!;
 
-  /** Service-role client — BYPASSES RLS. Used for seeding, cleanup and re-reads. */
-  let admin: SupabaseClient;
-  /** Anonymous client — subject under test; RLS applies. */
-  let anon: SupabaseClient;
+    /** Service-role client — BYPASSES RLS. Used for seeding, cleanup and re-reads. */
+    let admin: SupabaseClient;
+    /** Anonymous client — subject under test; RLS applies. */
+    let anon: SupabaseClient;
 
-  /** Ids of the seeded rows keyed by status, filled during seeding. */
-  const seededIds: Partial<Record<SeededStatus, string>> = {};
+    /** Ids of the seeded rows keyed by status, filled during seeding. */
+    const seededIds: Partial<Record<SeededStatus, string>> = {};
 
-  beforeAll(async () => {
-    admin = createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    anon = createClient(url, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    beforeAll(async () => {
+      admin = createClient(url, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      anon = createClient(url, anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
 
-    // Seed one event per status with the service role (bypasses RLS).
-    const fixtures = buildFixtures();
-    const { data, error } = await admin.from('events').insert(fixtures).select('id, status');
-    if (error) {
-      throw new Error(`Failed to seed events fixtures: ${error.message}`);
-    }
-    for (const row of data ?? []) {
-      seededIds[row.status as SeededStatus] = row.id as string;
-    }
-    // Sanity: all four statuses seeded.
-    for (const status of SEEDED_STATUSES) {
-      if (!seededIds[status]) {
-        throw new Error(`Seeding did not produce a "${status}" event row`);
-      }
-    }
-  });
-
-  afterAll(async () => {
-    // Remove only the rows this run created (service role bypasses RLS).
-    if (admin) {
-      const ids = Object.values(seededIds).filter((id): id is string => Boolean(id));
-      if (ids.length > 0) {
-        await admin.from('events').delete().in('id', ids);
-      }
-    }
-  });
-
-  // ---------------------------------------------------------------------------
-  // Task 5.3 — anonymous visibility (Req 1.6, 1.9, 21.4, 21.5, 26.1)
-  // ---------------------------------------------------------------------------
-  describe('Task 5.3 — anonymous SELECT visibility', () => {
-    it('returns the live event to anonymous clients', async () => {
-      const liveId = seededIds.live!;
-      const { data, error } = await anon
+      // Seed one event per status with the service role (bypasses RLS).
+      const fixtures = buildFixtures();
+      const { data, error } = await admin
         .from('events')
-        .select('id, status')
-        .eq('id', liveId);
-
-      expect(error).toBeNull();
-      expect(data).not.toBeNull();
-      expect(data).toHaveLength(1);
-      expect(data![0].id).toBe(liveId);
-      expect(data![0].status).toBe('live');
+        .insert(fixtures)
+        .select('id, status');
+      if (error) {
+        throw new Error(`Failed to seed events fixtures: ${error.message}`);
+      }
+      for (const row of data ?? []) {
+        seededIds[row.status as SeededStatus] = row.id as string;
+      }
+      // Sanity: all four statuses seeded.
+      for (const status of SEEDED_STATUSES) {
+        if (!seededIds[status]) {
+          throw new Error(`Seeding did not produce a "${status}" event row`);
+        }
+      }
     });
 
-    it.each(['draft', 'ended', 'archived'] as const)(
-      'hides the %s event from anonymous clients (zero rows)',
-      async (status) => {
-        const targetId = seededIds[status]!;
+    afterAll(async () => {
+      // Remove only the rows this run created (service role bypasses RLS).
+      if (admin) {
+        const ids = Object.values(seededIds).filter((id): id is string =>
+          Boolean(id),
+        );
+        if (ids.length > 0) {
+          await admin.from('events').delete().in('id', ids);
+        }
+      }
+    });
+
+    // ---------------------------------------------------------------------------
+    // Task 5.3 — anonymous visibility (Req 1.6, 1.9, 21.4, 21.5, 26.1)
+    // ---------------------------------------------------------------------------
+    describe('Task 5.3 — anonymous SELECT visibility', () => {
+      it('returns the live event to anonymous clients', async () => {
+        const liveId = seededIds.live!;
         const { data, error } = await anon
           .from('events')
           .select('id, status')
-          .eq('id', targetId);
+          .eq('id', liveId);
 
-        // RLS filters non-live rows out entirely — a filtered SELECT is not an
-        // error, it simply returns no rows.
         expect(error).toBeNull();
-        expect(data).toEqual([]);
-      },
-    );
+        expect(data).not.toBeNull();
+        expect(data).toHaveLength(1);
+        expect(data![0].id).toBe(liveId);
+        expect(data![0].status).toBe('live');
+      });
 
-    it('returns exactly one of our four seeded rows (only the live one) to anon', async () => {
-      const allIds = SEEDED_STATUSES.map((s) => seededIds[s]!);
-      const { data, error } = await anon
-        .from('events')
-        .select('id, status')
-        .in('id', allIds);
+      it.each(['draft', 'ended', 'archived'] as const)(
+        'hides the %s event from anonymous clients (zero rows)',
+        async (status) => {
+          const targetId = seededIds[status]!;
+          const { data, error } = await anon
+            .from('events')
+            .select('id, status')
+            .eq('id', targetId);
 
-      expect(error).toBeNull();
-      const returned = (data ?? []).map((r) => r.status);
-      expect(returned).toEqual(['live']);
-    });
-  });
+          // RLS filters non-live rows out entirely — a filtered SELECT is not an
+          // error, it simply returns no rows.
+          expect(error).toBeNull();
+          expect(data).toEqual([]);
+        },
+      );
 
-  // ---------------------------------------------------------------------------
-  // Task 5.4 — anonymous mutation denial (Req 10.5, 21.4, 21.6, 26.1)
-  // ---------------------------------------------------------------------------
-  describe('Task 5.4 — anonymous INSERT/UPDATE/DELETE denial', () => {
-    it('rejects an anonymous INSERT and creates no row', async () => {
-      const rogueName = `${RUN_TAG} anon-insert-should-fail`;
-      const { data, error } = await anon
-        .from('events')
-        .insert({
-          name: rogueName,
-          status: 'live',
-          starts_at: new Date(Date.now() - 1000).toISOString(),
-          ends_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-          presenter_token: makePresenterToken(),
-        })
-        .select('id');
+      it('returns exactly one of our four seeded rows (only the live one) to anon', async () => {
+        const allIds = SEEDED_STATUSES.map((s) => seededIds[s]!);
+        const { data, error } = await anon
+          .from('events')
+          .select('id, status')
+          .in('id', allIds);
 
-      // With RLS enabled and no client INSERT policy, the write is denied. The
-      // client surfaces this as an error and returns no inserted row.
-      expect(error).not.toBeNull();
-      expect(data ?? []).toEqual([]);
-
-      // Authoritative check via the service role: no such row exists.
-      const { data: check, error: checkError } = await admin
-        .from('events')
-        .select('id')
-        .eq('name', rogueName);
-      expect(checkError).toBeNull();
-      expect(check ?? []).toEqual([]);
+        expect(error).toBeNull();
+        const returned = (data ?? []).map((r) => r.status);
+        expect(returned).toEqual(['live']);
+      });
     });
 
-    it('rejects an anonymous UPDATE and leaves the row unchanged', async () => {
-      const liveId = seededIds.live!;
+    // ---------------------------------------------------------------------------
+    // Task 5.4 — anonymous mutation denial (Req 10.5, 21.4, 21.6, 26.1)
+    // ---------------------------------------------------------------------------
+    describe('Task 5.4 — anonymous INSERT/UPDATE/DELETE denial', () => {
+      it('rejects an anonymous INSERT and creates no row', async () => {
+        const rogueName = `${RUN_TAG} anon-insert-should-fail`;
+        const { data, error } = await anon
+          .from('events')
+          .insert({
+            name: rogueName,
+            status: 'live',
+            starts_at: new Date(Date.now() - 1000).toISOString(),
+            ends_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            presenter_token: makePresenterToken(),
+          })
+          .select('id');
 
-      // Snapshot the row via the service role before the attempt.
-      const { data: before } = await admin
-        .from('events')
-        .select('id, name, status')
-        .eq('id', liveId)
-        .single();
-
-      const { data, error } = await anon
-        .from('events')
-        .update({ name: `${RUN_TAG} hijacked` })
-        .eq('id', liveId)
-        .select('id');
-
-      // Denied by RLS: either an explicit error or, at minimum, zero rows
-      // affected. In both cases nothing must actually change.
-      if (error === null) {
+        // With RLS enabled and no client INSERT policy, the write is denied. The
+        // client surfaces this as an error and returns no inserted row.
+        expect(error).not.toBeNull();
         expect(data ?? []).toEqual([]);
-      }
 
-      // Authoritative re-read: the row is byte-for-byte unchanged.
-      const { data: after, error: afterError } = await admin
-        .from('events')
-        .select('id, name, status')
-        .eq('id', liveId)
-        .single();
-      expect(afterError).toBeNull();
-      expect(after).toEqual(before);
+        // Authoritative check via the service role: no such row exists.
+        const { data: check, error: checkError } = await admin
+          .from('events')
+          .select('id')
+          .eq('name', rogueName);
+        expect(checkError).toBeNull();
+        expect(check ?? []).toEqual([]);
+      });
+
+      it('rejects an anonymous UPDATE and leaves the row unchanged', async () => {
+        const liveId = seededIds.live!;
+
+        // Snapshot the row via the service role before the attempt.
+        const { data: before } = await admin
+          .from('events')
+          .select('id, name, status')
+          .eq('id', liveId)
+          .single();
+
+        const { data, error } = await anon
+          .from('events')
+          .update({ name: `${RUN_TAG} hijacked` })
+          .eq('id', liveId)
+          .select('id');
+
+        // Denied by RLS: either an explicit error or, at minimum, zero rows
+        // affected. In both cases nothing must actually change.
+        if (error === null) {
+          expect(data ?? []).toEqual([]);
+        }
+
+        // Authoritative re-read: the row is byte-for-byte unchanged.
+        const { data: after, error: afterError } = await admin
+          .from('events')
+          .select('id, name, status')
+          .eq('id', liveId)
+          .single();
+        expect(afterError).toBeNull();
+        expect(after).toEqual(before);
+      });
+
+      it('rejects an anonymous DELETE and the row still exists', async () => {
+        const liveId = seededIds.live!;
+
+        const { data, error } = await anon
+          .from('events')
+          .delete()
+          .eq('id', liveId)
+          .select('id');
+
+        // Denied by RLS: explicit error or zero rows affected — never an actual
+        // delete.
+        if (error === null) {
+          expect(data ?? []).toEqual([]);
+        }
+
+        // Authoritative re-read: the row is still present.
+        const { data: after, error: afterError } = await admin
+          .from('events')
+          .select('id')
+          .eq('id', liveId);
+        expect(afterError).toBeNull();
+        expect(after).toHaveLength(1);
+        expect(after![0].id).toBe(liveId);
+      });
     });
-
-    it('rejects an anonymous DELETE and the row still exists', async () => {
-      const liveId = seededIds.live!;
-
-      const { data, error } = await anon
-        .from('events')
-        .delete()
-        .eq('id', liveId)
-        .select('id');
-
-      // Denied by RLS: explicit error or zero rows affected — never an actual
-      // delete.
-      if (error === null) {
-        expect(data ?? []).toEqual([]);
-      }
-
-      // Authoritative re-read: the row is still present.
-      const { data: after, error: afterError } = await admin
-        .from('events')
-        .select('id')
-        .eq('id', liveId);
-      expect(afterError).toBeNull();
-      expect(after).toHaveLength(1);
-      expect(after![0].id).toBe(liveId);
-    });
-  });
-});
+  },
+);

@@ -65,20 +65,11 @@ import { supabase } from './supabaseClient';
  * clearly labelled, so a moderator can act on the whole queue.
  */
 export type ModerationQuestionStatus =
-  | 'pending'
-  | 'approved'
-  | 'featured'
-  | 'answered'
-  | 'hidden';
+  'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
 
 /** All moderation statuses, in a natural queue ordering (for filter controls). */
-export const MODERATION_QUESTION_STATUSES: readonly ModerationQuestionStatus[] = [
-  'pending',
-  'approved',
-  'featured',
-  'answered',
-  'hidden',
-] as const;
+export const MODERATION_QUESTION_STATUSES: readonly ModerationQuestionStatus[] =
+  ['pending', 'approved', 'featured', 'answered', 'hidden'] as const;
 
 /**
  * The moderation actions a moderator may apply. These are the moderator-facing
@@ -282,8 +273,7 @@ export function filterModerationQuestions(
 ): ModerationQuestion[] {
   const { status, category } = filter;
 
-  const trimmedCategory =
-    typeof category === 'string' ? category.trim() : '';
+  const trimmedCategory = typeof category === 'string' ? category.trim() : '';
   const trimmedSearch =
     typeof filter.searchText === 'string' ? filter.searchText.trim() : '';
   const needle = trimmedSearch.toLowerCase();
@@ -375,7 +365,10 @@ function isModerateSuccess(value: unknown): value is {
  * {@link ModerationError}. Messages are always sanitised, user-safe strings
  * (the Edge Function never leaks internals — Design → Error Handling).
  */
-function toModerationError(status: number, body: EdgeErrorBody): ModerationError {
+function toModerationError(
+  status: number,
+  body: EdgeErrorBody,
+): ModerationError {
   const code = body.error.code;
   const message = body.error.message;
 

@@ -50,7 +50,9 @@ describe('assertClientSafeEnvName', () => {
   );
 
   it('returns the name for a safe VITE_-prefixed variable', () => {
-    expect(assertClientSafeEnvName('VITE_SUPABASE_URL')).toBe('VITE_SUPABASE_URL');
+    expect(assertClientSafeEnvName('VITE_SUPABASE_URL')).toBe(
+      'VITE_SUPABASE_URL',
+    );
     expect(assertClientSafeEnvName('VITE_SUPABASE_ANON_KEY')).toBe(
       'VITE_SUPABASE_ANON_KEY',
     );
@@ -96,9 +98,10 @@ describe('readClientEnv', () => {
     const env = readClientEnv(source);
 
     // Only the two VITE_ keys are exposed; no server-only name leaks through.
-    expect(Object.keys(env).sort()).toEqual(
-      ['VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_URL'],
-    );
+    expect(Object.keys(env).sort()).toEqual([
+      'VITE_SUPABASE_ANON_KEY',
+      'VITE_SUPABASE_URL',
+    ]);
     for (const name of SERVER_ONLY_NAMES) {
       expect(env).not.toHaveProperty(name);
     }

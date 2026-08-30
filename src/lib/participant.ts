@@ -86,7 +86,9 @@ export interface StorageLike {
 function getBrowserStorage(kind: 'local' | 'session'): StorageLike | null {
   try {
     // `globalThis.window` may be undefined in non-browser (SSR/test) contexts.
-    const w = (globalThis as { window?: Window }).window ?? (globalThis as unknown as Window);
+    const w =
+      (globalThis as { window?: Window }).window ??
+      (globalThis as unknown as Window);
     const storage = kind === 'local' ? w?.localStorage : w?.sessionStorage;
     return storage ?? null;
   } catch {
@@ -112,7 +114,11 @@ function safeRead(storage: StorageLike | null, key: string): string | null {
  * `false` if the write throws (e.g. quota exceeded / private mode) or storage
  * is unavailable — the caller uses this to decide whether persistence held.
  */
-function safeWrite(storage: StorageLike | null, key: string, value: string): boolean {
+function safeWrite(
+  storage: StorageLike | null,
+  key: string,
+  value: string,
+): boolean {
   if (!storage) return false;
   try {
     storage.setItem(key, value);

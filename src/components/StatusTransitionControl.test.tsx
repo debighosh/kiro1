@@ -103,11 +103,15 @@ describe('StatusTransitionControl', () => {
     });
     expect(onTransition).toHaveBeenCalledWith('live');
     // Now in the 'live' state, the offered action becomes "End event".
-    expect(screen.getByRole('button', { name: 'End event' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'End event' }),
+    ).toBeInTheDocument();
   });
 
   it('offers no actions for an archived event and shows the cannot-reactivate note (Req 1.11)', () => {
-    render(<StatusTransitionControl event={{ id: EVENT_ID, status: 'archived' }} />);
+    render(
+      <StatusTransitionControl event={{ id: EVENT_ID, status: 'archived' }} />,
+    );
 
     expect(screen.getByTestId('current-status')).toHaveTextContent('Archived');
     // Terminal: no transition action buttons at all.
@@ -126,7 +130,9 @@ describe('StatusTransitionControl', () => {
       }),
     );
 
-    render(<StatusTransitionControl event={{ id: EVENT_ID, status: 'live' }} />);
+    render(
+      <StatusTransitionControl event={{ id: EVENT_ID, status: 'live' }} />,
+    );
 
     expect(screen.getByTestId('current-status')).toHaveTextContent('Live');
     await user.click(screen.getByRole('button', { name: 'End event' }));
@@ -137,7 +143,9 @@ describe('StatusTransitionControl', () => {
     // ...and the displayed status is NOT changed by the failed attempt.
     expect(screen.getByTestId('current-status')).toHaveTextContent('Live');
     // The action remains available to retry.
-    expect(screen.getByRole('button', { name: 'End event' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'End event' }),
+    ).toBeInTheDocument();
   });
 
   it('disables the action button and marks it aria-busy while submitting (Req 24.7)', async () => {
@@ -150,7 +158,9 @@ describe('StatusTransitionControl', () => {
       }),
     );
 
-    render(<StatusTransitionControl event={{ id: EVENT_ID, status: 'live' }} />);
+    render(
+      <StatusTransitionControl event={{ id: EVENT_ID, status: 'live' }} />,
+    );
 
     const endBtn = screen.getByRole('button', { name: 'End event' });
     await user.click(endBtn);

@@ -45,7 +45,10 @@ const EVENT = 'event-1';
 const PARTICIPANT = 'participant-abc';
 
 /** A model with a manually-advanceable clock for deterministic rate-limit tests. */
-function makeModelWithClock(): { model: QaModel; advance: (ms: number) => void } {
+function makeModelWithClock(): {
+  model: QaModel;
+  advance: (ms: number) => void;
+} {
   let now = 1_000_000;
   const model = new QaModel(() => now);
   return { model, advance: (ms: number) => (now += ms) };
@@ -66,14 +69,22 @@ describe('submitStatusForModerationMode (Req 3.6, 3.7)', () => {
   it('a pre-moderation submit inserts a pending question', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'pre', live: true });
-    const q = model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'Hi?' });
+    const q = model.submitQuestion({
+      eventId: EVENT,
+      participant: PARTICIPANT,
+      text: 'Hi?',
+    });
     expect(q.status).toBe('pending');
   });
 
   it('a post-moderation submit inserts an approved question', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: true });
-    const q = model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'Hi?' });
+    const q = model.submitQuestion({
+      eventId: EVENT,
+      participant: PARTICIPANT,
+      text: 'Hi?',
+    });
     expect(q.status).toBe('approved');
   });
 });
@@ -91,7 +102,9 @@ describe('question text length + sanitisation (Req 3.1, 3.2, 22.1)', () => {
   });
 
   it('rejects 301 code points (over-length)', () => {
-    expect(isValidQuestionText('x'.repeat(MAX_QUESTION_LENGTH + 1))).toBe(false);
+    expect(isValidQuestionText('x'.repeat(MAX_QUESTION_LENGTH + 1))).toBe(
+      false,
+    );
   });
 
   it('rejects an empty string', () => {
@@ -116,7 +129,9 @@ describe('question text length + sanitisation (Req 3.1, 3.2, 22.1)', () => {
     const emoji300 = '😀'.repeat(MAX_QUESTION_LENGTH);
     expect(codePointLength(emoji300)).toBe(MAX_QUESTION_LENGTH);
     expect(isValidQuestionText(emoji300)).toBe(true);
-    expect(isValidQuestionText('😀'.repeat(MAX_QUESTION_LENGTH + 1))).toBe(false);
+    expect(isValidQuestionText('😀'.repeat(MAX_QUESTION_LENGTH + 1))).toBe(
+      false,
+    );
   });
 
   it('strips control characters but keeps printable text', () => {
@@ -124,14 +139,20 @@ describe('question text length + sanitisation (Req 3.1, 3.2, 22.1)', () => {
   });
 
   it('collapses tab/newline/CR runs to a single space and trims', () => {
-    expect(sanitiseQuestionText('  hello\t\tworld\n\nfoo  ')).toBe('hello world foo');
+    expect(sanitiseQuestionText('  hello\t\tworld\n\nfoo  ')).toBe(
+      'hello world foo',
+    );
   });
 
   it('submit rejects invalid length with invalid_length signal', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: true });
     expect(() =>
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: '   ' }),
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: '   ',
+      }),
     ).toThrow(new QaRuleError('invalid_length'));
     expect(() =>
       model.submitQuestion({
@@ -162,21 +183,33 @@ describe('submit live gating (Req 3.3)', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: false });
     expect(() =>
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'Hi?' }),
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: 'Hi?',
+      }),
     ).toThrow(new QaRuleError('event_not_live'));
   });
 
   it('rejects submission to an unknown event (defaults to not live)', () => {
     const model = new QaModel();
     expect(() =>
-      model.submitQuestion({ eventId: 'no-such-event', participant: PARTICIPANT, text: 'Hi?' }),
+      model.submitQuestion({
+        eventId: 'no-such-event',
+        participant: PARTICIPANT,
+        text: 'Hi?',
+      }),
     ).toThrow(new QaRuleError('event_not_live'));
   });
 
   it('accepts submission when the event is live', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'pre', live: true });
-    const q = model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'Hi?' });
+    const q = model.submitQuestion({
+      eventId: EVENT,
+      participant: PARTICIPANT,
+      text: 'Hi?',
+    });
     expect(q.status).toBe('pending');
     expect(q.text).toBe('Hi?');
   });
@@ -250,7 +283,11 @@ describe('vote cast / remove count maths (Req 4.4, 4.5, 4.6)', () => {
   function liveApprovedModel(): { model: QaModel; questionId: string } {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: true });
-    const questionId = model.seedQuestion({ eventId: EVENT, status: 'approved', voteCount: 0 });
+    const questionId = model.seedQuestion({
+      eventId: EVENT,
+      status: 'approved',
+      voteCount: 0,
+    });
     return { model, questionId };
   }
 
@@ -292,9 +329,9 @@ describe('vote cast / remove count maths (Req 4.4, 4.5, 4.6)', () => {
 
   it('remove-with-no-vote is a no-op on the count and raises no_vote_to_remove (Req 4.6)', () => {
     const { model, questionId } = liveApprovedModel();
-    expect(() => model.removeVote({ questionId, participant: 'never-voted' })).toThrow(
-      new QaRuleError('no_vote_to_remove'),
-    );
+    expect(() =>
+      model.removeVote({ questionId, participant: 'never-voted' }),
+    ).toThrow(new QaRuleError('no_vote_to_remove'));
     expect(model.getQuestion(questionId)!.voteCount).toBe(0);
   });
 
@@ -310,9 +347,9 @@ describe('vote cast / remove count maths (Req 4.4, 4.5, 4.6)', () => {
 
   it('casting on an unknown question raises question_not_found', () => {
     const { model } = liveApprovedModel();
-    expect(() => model.castVote({ questionId: 'nope', participant: 'p1' })).toThrow(
-      new QaRuleError('question_not_found'),
-    );
+    expect(() =>
+      model.castVote({ questionId: 'nope', participant: 'p1' }),
+    ).toThrow(new QaRuleError('question_not_found'));
   });
 });
 
@@ -336,7 +373,11 @@ describe('vote eligibility (Req 4.8)', () => {
     (status) => {
       const model = new QaModel();
       model.setEvent(EVENT, { mode: 'pre', live: true });
-      const questionId = model.seedQuestion({ eventId: EVENT, status, voteCount: 3 });
+      const questionId = model.seedQuestion({
+        eventId: EVENT,
+        status,
+        voteCount: 3,
+      });
       expect(() => model.castVote({ questionId, participant: 'p1' })).toThrow(
         new QaRuleError('not_eligible'),
       );
@@ -347,7 +388,11 @@ describe('vote eligibility (Req 4.8)', () => {
   it('rejects a vote on an approved question when the event is NOT live', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: false });
-    const questionId = model.seedQuestion({ eventId: EVENT, status: 'approved', voteCount: 5 });
+    const questionId = model.seedQuestion({
+      eventId: EVENT,
+      status: 'approved',
+      voteCount: 5,
+    });
     expect(() => model.castVote({ questionId, participant: 'p1' })).toThrow(
       new QaRuleError('not_eligible'),
     );
@@ -357,14 +402,22 @@ describe('vote eligibility (Req 4.8)', () => {
   it('allows a vote on a featured question on a live event', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: true });
-    const questionId = model.seedQuestion({ eventId: EVENT, status: 'featured', voteCount: 0 });
+    const questionId = model.seedQuestion({
+      eventId: EVENT,
+      status: 'featured',
+      voteCount: 0,
+    });
     expect(model.castVote({ questionId, participant: 'p1' })).toBe(1);
   });
 
   it('removal is NOT eligibility-gated: a vote can be withdrawn after status changes', () => {
     const model = new QaModel();
     model.setEvent(EVENT, { mode: 'post', live: true });
-    const questionId = model.seedQuestion({ eventId: EVENT, status: 'approved', voteCount: 0 });
+    const questionId = model.seedQuestion({
+      eventId: EVENT,
+      status: 'approved',
+      voteCount: 0,
+    });
     model.castVote({ questionId, participant: 'p1' });
     // Status is now (hypothetically) no longer eligible, but removal still works.
     expect(model.removeVote({ questionId, participant: 'p1' })).toBe(0);
@@ -380,11 +433,19 @@ describe('rate limiting (Req 21.13, 21.14, 21.15)', () => {
     model.setEvent(EVENT, { mode: 'post', live: true });
     for (let i = 0; i < SUBMIT_RATE_LIMIT_MAX; i += 1) {
       expect(() =>
-        model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: `q${i}` }),
+        model.submitQuestion({
+          eventId: EVENT,
+          participant: PARTICIPANT,
+          text: `q${i}`,
+        }),
       ).not.toThrow();
     }
     expect(() =>
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'one too many' }),
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: 'one too many',
+      }),
     ).toThrow(new QaRuleError('rate_limited'));
   });
 
@@ -392,12 +453,20 @@ describe('rate limiting (Req 21.13, 21.14, 21.15)', () => {
     const { model, advance } = makeModelWithClock();
     model.setEvent(EVENT, { mode: 'post', live: true });
     for (let i = 0; i < SUBMIT_RATE_LIMIT_MAX; i += 1) {
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: `q${i}` });
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: `q${i}`,
+      });
     }
     // Just past the 60s window → the earlier events fall out.
     advance(RATE_LIMIT_WINDOW_SECONDS * 1000 + 1);
     expect(() =>
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'fresh window' }),
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: 'fresh window',
+      }),
     ).not.toThrow();
   });
 
@@ -405,10 +474,18 @@ describe('rate limiting (Req 21.13, 21.14, 21.15)', () => {
     const { model } = makeModelWithClock();
     model.setEvent(EVENT, { mode: 'post', live: true });
     for (let i = 0; i < SUBMIT_RATE_LIMIT_MAX; i += 1) {
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: `q${i}` });
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: `q${i}`,
+      });
     }
     expect(() =>
-      model.submitQuestion({ eventId: EVENT, participant: 'other', text: 'still ok' }),
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: 'other',
+        text: 'still ok',
+      }),
     ).not.toThrow();
   });
 
@@ -420,10 +497,18 @@ describe('rate limiting (Req 21.13, 21.14, 21.15)', () => {
       model.seedQuestion({ eventId: EVENT, status: 'approved' }),
     );
     for (let i = 0; i < VOTE_RATE_LIMIT_MAX; i += 1) {
-      expect(() => model.castVote({ questionId: questionIds[i], participant: PARTICIPANT })).not.toThrow();
+      expect(() =>
+        model.castVote({
+          questionId: questionIds[i],
+          participant: PARTICIPANT,
+        }),
+      ).not.toThrow();
     }
     expect(() =>
-      model.castVote({ questionId: questionIds[VOTE_RATE_LIMIT_MAX], participant: PARTICIPANT }),
+      model.castVote({
+        questionId: questionIds[VOTE_RATE_LIMIT_MAX],
+        participant: PARTICIPANT,
+      }),
     ).toThrow(new QaRuleError('rate_limited'));
   });
 
@@ -431,18 +516,30 @@ describe('rate limiting (Req 21.13, 21.14, 21.15)', () => {
     const { model, advance } = makeModelWithClock();
     model.setEvent(EVENT, { mode: 'post', live: true });
     for (let i = 0; i < SUBMIT_RATE_LIMIT_MAX; i += 1) {
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: `q${i}` });
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: `q${i}`,
+      });
     }
     // Several rejected attempts must not extend/refresh the window.
     for (let i = 0; i < 3; i += 1) {
       expect(() =>
-        model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'blocked' }),
+        model.submitQuestion({
+          eventId: EVENT,
+          participant: PARTICIPANT,
+          text: 'blocked',
+        }),
       ).toThrow(new QaRuleError('rate_limited'));
     }
     // Once the original 10 age out, a submit is allowed again.
     advance(RATE_LIMIT_WINDOW_SECONDS * 1000 + 1);
     expect(() =>
-      model.submitQuestion({ eventId: EVENT, participant: PARTICIPANT, text: 'ok now' }),
+      model.submitQuestion({
+        eventId: EVENT,
+        participant: PARTICIPANT,
+        text: 'ok now',
+      }),
     ).not.toThrow();
   });
 
@@ -453,11 +550,13 @@ describe('rate limiting (Req 21.13, 21.14, 21.15)', () => {
     const approved = model.seedQuestion({ eventId: EVENT, status: 'approved' });
     // 30 failed attempts on an ineligible question...
     for (let i = 0; i < VOTE_RATE_LIMIT_MAX; i += 1) {
-      expect(() => model.castVote({ questionId: pending, participant: PARTICIPANT })).toThrow(
-        new QaRuleError('not_eligible'),
-      );
+      expect(() =>
+        model.castVote({ questionId: pending, participant: PARTICIPANT }),
+      ).toThrow(new QaRuleError('not_eligible'));
     }
     // ...still leave the full vote budget available for an eligible question.
-    expect(() => model.castVote({ questionId: approved, participant: PARTICIPANT })).not.toThrow();
+    expect(() =>
+      model.castVote({ questionId: approved, participant: PARTICIPANT }),
+    ).not.toThrow();
   });
 });

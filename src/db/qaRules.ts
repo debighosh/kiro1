@@ -54,7 +54,8 @@
 export type ModerationMode = 'pre' | 'post';
 
 /** Mirrors the DB `question_status` enum. */
-export type QuestionStatus = 'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
+export type QuestionStatus =
+  'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
 
 /** Question-text length bounds in Unicode code points (Req 22.1, 3.1, 3.2). */
 export const MIN_QUESTION_LENGTH = 1 as const;
@@ -66,7 +67,10 @@ export const VOTE_RATE_LIMIT_MAX = 30 as const; // votes per window (Req 21.14)
 export const RATE_LIMIT_WINDOW_SECONDS = 60 as const; // sliding window (Req 21.13/21.14)
 
 /** Statuses on which a vote may be cast (Req 4.8) — must ALSO be on a live event. */
-export const VOTE_ELIGIBLE_STATUSES: readonly QuestionStatus[] = ['approved', 'featured'] as const;
+export const VOTE_ELIGIBLE_STATUSES: readonly QuestionStatus[] = [
+  'approved',
+  'featured',
+] as const;
 
 // ---------------------------------------------------------------------------
 // 1. Moderation-mode → initial submit status (Req 3.6, 3.7).
@@ -80,7 +84,9 @@ export const VOTE_ELIGIBLE_STATUSES: readonly QuestionStatus[] = ['approved', 'f
  * by the parent event's `moderation_mode` (Req 3.6, 3.7). Pre-moderation queues
  * the question as `pending`; post-moderation publishes it as `approved`.
  */
-export function submitStatusForModerationMode(mode: ModerationMode): QuestionStatus {
+export function submitStatusForModerationMode(
+  mode: ModerationMode,
+): QuestionStatus {
   return mode === 'pre' ? 'pending' : 'approved';
 }
 
@@ -152,7 +158,10 @@ export function canSubmit(eventLive: boolean): boolean {
  * live-ness is `eventLive` (Req 4.8). Removal is intentionally NOT gated (a
  * participant may always withdraw a vote) — see {@link QaModel.removeVote}.
  */
-export function isVoteEligible(status: QuestionStatus, eventLive: boolean): boolean {
+export function isVoteEligible(
+  status: QuestionStatus,
+  eventLive: boolean,
+): boolean {
   return eventLive === true && VOTE_ELIGIBLE_STATUSES.includes(status);
 }
 
@@ -226,7 +235,10 @@ export class QaModel {
   constructor(private readonly nowMs: () => number = () => Date.now()) {}
 
   /** Register an event's moderation mode + live-ness (test fixture helper). */
-  setEvent(eventId: string, opts: { mode: ModerationMode; live: boolean }): void {
+  setEvent(
+    eventId: string,
+    opts: { mode: ModerationMode; live: boolean },
+  ): void {
     this.eventModes.set(eventId, opts.mode);
     this.eventLive.set(eventId, opts.live);
   }
@@ -437,7 +449,6 @@ export class QaModel {
   }
 }
 
-
 // ---------------------------------------------------------------------------
 // 5. Moderation-visibility rule (Req 3.9, 3.10, 7.9) — Property 10.
 //    Mirrors the anonymous SELECT RLS policy on `questions`
@@ -495,7 +506,10 @@ export const NEVER_VISIBLE_STATUSES: readonly QuestionStatus[] = [
  * audience and presenter surfaces are computed from it (the presenter may
  * additionally narrow the set further in its read layer, but never widens it).
  */
-export function isModerationVisible(status: QuestionStatus, eventLive: boolean): boolean {
+export function isModerationVisible(
+  status: QuestionStatus,
+  eventLive: boolean,
+): boolean {
   return eventLive === true && AUDIENCE_VISIBLE_STATUSES.includes(status);
 }
 
@@ -520,6 +534,7 @@ export function visibleQuestions<T extends { readonly status: QuestionStatus }>(
 ): T[] {
   return rows.filter(
     (row) =>
-      isModerationVisible(row.status, eventLive) && allowedStatuses.includes(row.status),
+      isModerationVisible(row.status, eventLive) &&
+      allowedStatuses.includes(row.status),
   );
 }

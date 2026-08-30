@@ -92,14 +92,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * on purpose so these secrets never leak into the browser bundle.
  */
 function readTestEnv(name: string): string | undefined {
-  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  const proc = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process;
   const value = proc?.env?.[name];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
 const TEST_SUPABASE_URL = readTestEnv('TEST_SUPABASE_URL');
 const TEST_SUPABASE_ANON_KEY = readTestEnv('TEST_SUPABASE_ANON_KEY');
-const TEST_SUPABASE_SERVICE_ROLE_KEY = readTestEnv('TEST_SUPABASE_SERVICE_ROLE_KEY');
+const TEST_SUPABASE_SERVICE_ROLE_KEY = readTestEnv(
+  'TEST_SUPABASE_SERVICE_ROLE_KEY',
+);
 
 /**
  * The suite only runs when a full, real TEST Supabase configuration is present.
@@ -126,7 +130,8 @@ if (!hasLiveSupabase) {
 }
 
 /** The five question statuses we seed on the LIVE event, one row each. */
-type QuestionStatus = 'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
+type QuestionStatus =
+  'pending' | 'approved' | 'featured' | 'answered' | 'hidden';
 const ALL_STATUSES: readonly QuestionStatus[] = [
   'pending',
   'approved',
@@ -145,7 +150,11 @@ const ANON_HIDDEN_STATUSES: readonly QuestionStatus[] = ['pending', 'hidden'];
  * Statuses the anon policy ADMITS on a live event, per the questions RLS
  * DECISION note: approved/featured/answered.
  */
-const ANON_VISIBLE_STATUSES: readonly QuestionStatus[] = ['approved', 'featured', 'answered'];
+const ANON_VISIBLE_STATUSES: readonly QuestionStatus[] = [
+  'approved',
+  'featured',
+  'answered',
+];
 
 /**
  * Generate a >=32-char alphanumeric presenter token that satisfies the
@@ -153,7 +162,8 @@ const ANON_VISIBLE_STATUSES: readonly QuestionStatus[] = ['approved', 'featured'
  * the UNIQUE constraint, so we mix in randomness.
  */
 function makePresenterToken(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let token = '';
   while (token.length < 40) {
     token += alphabet[Math.floor(Math.random() * alphabet.length)];
@@ -173,7 +183,10 @@ interface SeededEventRow {
 }
 
 /** Build an event fixture row with valid fields for a given lifecycle status. */
-function buildEvent(status: SeededEventRow['status'], label: string): SeededEventRow {
+function buildEvent(
+  status: SeededEventRow['status'],
+  label: string,
+): SeededEventRow {
   const startsAt = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h ago
   const endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1h ahead
   return {
@@ -225,17 +238,24 @@ describe.skipIf(!hasLiveSupabase)(
       // --- Seed events (service role bypasses RLS) -------------------------
       const { data: events, error: eventsError } = await admin
         .from('events')
-        .insert([buildEvent('live', 'live-event'), buildEvent('draft', 'draft-event')])
+        .insert([
+          buildEvent('live', 'live-event'),
+          buildEvent('draft', 'draft-event'),
+        ])
         .select('id, status');
       if (eventsError) {
-        throw new Error(`Failed to seed events fixtures: ${eventsError.message}`);
+        throw new Error(
+          `Failed to seed events fixtures: ${eventsError.message}`,
+        );
       }
       for (const row of events ?? []) {
         if (row.status === 'live') liveEventId = row.id as string;
         if (row.status === 'draft') draftEventId = row.id as string;
       }
       if (!liveEventId || !draftEventId) {
-        throw new Error('Seeding did not produce both the live and draft event rows');
+        throw new Error(
+          'Seeding did not produce both the live and draft event rows',
+        );
       }
 
       // --- Seed one question per status on the LIVE event ------------------
@@ -249,14 +269,18 @@ describe.skipIf(!hasLiveSupabase)(
         .insert(liveQuestions)
         .select('id, status');
       if (qError) {
-        throw new Error(`Failed to seed live-event questions: ${qError.message}`);
+        throw new Error(
+          `Failed to seed live-event questions: ${qError.message}`,
+        );
       }
       for (const row of qRows ?? []) {
         liveQuestionIds[row.status as QuestionStatus] = row.id as string;
       }
       for (const status of ALL_STATUSES) {
         if (!liveQuestionIds[status]) {
-          throw new Error(`Seeding did not produce a live "${status}" question row`);
+          throw new Error(
+            `Seeding did not produce a live "${status}" question row`,
+          );
         }
       }
 
@@ -290,7 +314,9 @@ describe.skipIf(!hasLiveSupabase)(
         .select('id')
         .single();
       if (voteError || !voteRow) {
-        throw new Error(`Failed to seed the vote row: ${voteError?.message ?? 'no row'}`);
+        throw new Error(
+          `Failed to seed the vote row: ${voteError?.message ?? 'no row'}`,
+        );
       }
       seededVoteId = voteRow.id as string;
     });
@@ -301,7 +327,9 @@ describe.skipIf(!hasLiveSupabase)(
       // CASCADE), but we delete votes/questions first to be explicit and to
       // tolerate any partial-seed failure.
       if (admin) {
-        const eventIds = [liveEventId, draftEventId].filter((id): id is string => Boolean(id));
+        const eventIds = [liveEventId, draftEventId].filter(
+          (id): id is string => Boolean(id),
+        );
         if (eventIds.length > 0) {
           await admin.from('question_votes').delete().in('event_id', eventIds);
           await admin.from('questions').delete().in('event_id', eventIds);
@@ -322,7 +350,9 @@ describe.skipIf(!hasLiveSupabase)(
           .in('id', allLiveIds);
 
         expect(error).toBeNull();
-        const returnedStatuses = new Set((data ?? []).map((r) => r.status as QuestionStatus));
+        const returnedStatuses = new Set(
+          (data ?? []).map((r) => r.status as QuestionStatus),
+        );
         // Security-critical invariant: pending/hidden are NEVER visible to anon.
         for (const forbidden of ANON_HIDDEN_STATUSES) {
           expect(returnedStatuses.has(forbidden)).toBe(false);
@@ -337,10 +367,14 @@ describe.skipIf(!hasLiveSupabase)(
           .in('id', allLiveIds);
 
         expect(error).toBeNull();
-        const returnedStatuses = new Set((data ?? []).map((r) => r.status as QuestionStatus));
+        const returnedStatuses = new Set(
+          (data ?? []).map((r) => r.status as QuestionStatus),
+        );
         // The visible set is exactly approved/featured/answered (per the anon
         // policy USING list) — and nothing else.
-        expect([...returnedStatuses].sort()).toEqual([...ANON_VISIBLE_STATUSES].sort());
+        expect([...returnedStatuses].sort()).toEqual(
+          [...ANON_VISIBLE_STATUSES].sort(),
+        );
       });
 
       it.each(ANON_HIDDEN_STATUSES)(
@@ -465,7 +499,10 @@ describe.skipIf(!hasLiveSupabase)(
         expect(data).not.toBeNull();
 
         if (data?.id) {
-          await admin.from('question_votes').delete().eq('id', data.id as string);
+          await admin
+            .from('question_votes')
+            .delete()
+            .eq('id', data.id as string);
         }
       });
     });

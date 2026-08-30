@@ -36,10 +36,7 @@
 
 // Deno-style import used by Supabase Edge Functions. The `jsr:` specifier is the
 // currently recommended way to import supabase-js inside Edge Functions.
-import {
-  createClient,
-  type SupabaseClient,
-} from 'jsr:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 /**
  * Reads a required environment variable from the Deno environment, throwing a

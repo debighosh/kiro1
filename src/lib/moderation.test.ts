@@ -188,7 +188,9 @@ describe('readModerationQuestions — authorisation (Req 10.5)', () => {
 
     expect(fromMock).toHaveBeenCalledWith('questions');
     expect(chain.eq).toHaveBeenCalledWith('event_id', 'e-1');
-    expect(chain.order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(chain.order).toHaveBeenCalledWith('created_at', {
+      ascending: false,
+    });
     expect(result).toEqual(rows);
   });
 });
@@ -199,55 +201,118 @@ describe('readModerationQuestions — authorisation (Req 10.5)', () => {
 // ---------------------------------------------------------------------------
 describe('filterModerationQuestions', () => {
   const sample: ModerationQuestion[] = [
-    makeQuestion({ id: 'a', status: 'pending', ai_category: 'Pricing', text: 'How much does Pricing cost?' }),
-    makeQuestion({ id: 'b', status: 'approved', ai_category: 'Pricing', text: 'Is the PRICING negotiable?' }),
-    makeQuestion({ id: 'c', status: 'pending', ai_category: 'Support', text: 'Where is support?' }),
-    makeQuestion({ id: 'd', status: 'hidden', ai_category: null, text: 'Uncategorised pricing note' }),
-    makeQuestion({ id: 'e', status: 'approved', ai_category: null, text: 'General remark' }),
+    makeQuestion({
+      id: 'a',
+      status: 'pending',
+      ai_category: 'Pricing',
+      text: 'How much does Pricing cost?',
+    }),
+    makeQuestion({
+      id: 'b',
+      status: 'approved',
+      ai_category: 'Pricing',
+      text: 'Is the PRICING negotiable?',
+    }),
+    makeQuestion({
+      id: 'c',
+      status: 'pending',
+      ai_category: 'Support',
+      text: 'Where is support?',
+    }),
+    makeQuestion({
+      id: 'd',
+      status: 'hidden',
+      ai_category: null,
+      text: 'Uncategorised pricing note',
+    }),
+    makeQuestion({
+      id: 'e',
+      status: 'approved',
+      ai_category: null,
+      text: 'General remark',
+    }),
   ];
 
   const ids = (rows: ModerationQuestion[]) => rows.map((r) => r.id);
 
   it('returns all rows for empty/undefined criteria (no-op)', () => {
-    expect(ids(filterModerationQuestions(sample))).toEqual(['a', 'b', 'c', 'd', 'e']);
-    expect(ids(filterModerationQuestions(sample, {}))).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(ids(filterModerationQuestions(sample))).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+    ]);
+    expect(ids(filterModerationQuestions(sample, {}))).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+    ]);
     expect(
-      ids(filterModerationQuestions(sample, { status: undefined, category: undefined, searchText: undefined })),
+      ids(
+        filterModerationQuestions(sample, {
+          status: undefined,
+          category: undefined,
+          searchText: undefined,
+        }),
+      ),
     ).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   it('treats a blank/whitespace category or searchText as a no-op', () => {
-    expect(ids(filterModerationQuestions(sample, { category: '   ' }))).toEqual([
-      'a', 'b', 'c', 'd', 'e',
-    ]);
-    expect(ids(filterModerationQuestions(sample, { searchText: '   ' }))).toEqual([
-      'a', 'b', 'c', 'd', 'e',
-    ]);
+    expect(ids(filterModerationQuestions(sample, { category: '   ' }))).toEqual(
+      ['a', 'b', 'c', 'd', 'e'],
+    );
+    expect(
+      ids(filterModerationQuestions(sample, { searchText: '   ' })),
+    ).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   it('filters by status only', () => {
-    expect(ids(filterModerationQuestions(sample, { status: 'pending' }))).toEqual(['a', 'c']);
-    expect(ids(filterModerationQuestions(sample, { status: 'approved' }))).toEqual(['b', 'e']);
-    expect(ids(filterModerationQuestions(sample, { status: 'featured' }))).toEqual([]);
+    expect(
+      ids(filterModerationQuestions(sample, { status: 'pending' })),
+    ).toEqual(['a', 'c']);
+    expect(
+      ids(filterModerationQuestions(sample, { status: 'approved' })),
+    ).toEqual(['b', 'e']);
+    expect(
+      ids(filterModerationQuestions(sample, { status: 'featured' })),
+    ).toEqual([]);
   });
 
   it('filters by category only; a null ai_category never matches a non-empty category', () => {
-    expect(ids(filterModerationQuestions(sample, { category: 'Pricing' }))).toEqual(['a', 'b']);
-    expect(ids(filterModerationQuestions(sample, { category: 'Support' }))).toEqual(['c']);
+    expect(
+      ids(filterModerationQuestions(sample, { category: 'Pricing' })),
+    ).toEqual(['a', 'b']);
+    expect(
+      ids(filterModerationQuestions(sample, { category: 'Support' })),
+    ).toEqual(['c']);
     // 'd' and 'e' have ai_category === null → excluded by any non-empty category filter.
-    expect(ids(filterModerationQuestions(sample, { category: 'Nonexistent' }))).toEqual([]);
+    expect(
+      ids(filterModerationQuestions(sample, { category: 'Nonexistent' })),
+    ).toEqual([]);
   });
 
   it('is category case/value exact (does not match null via case-folding)', () => {
     // Category matching is exact equality on the trimmed value, not substring.
-    expect(ids(filterModerationQuestions(sample, { category: 'pric' }))).toEqual([]);
+    expect(
+      ids(filterModerationQuestions(sample, { category: 'pric' })),
+    ).toEqual([]);
   });
 
   it('filters by case-insensitive substring search on text', () => {
     // 'pricing' matches a/b (mixed case) and d ('pricing note'), regardless of case.
-    expect(ids(filterModerationQuestions(sample, { searchText: 'pricing' }))).toEqual(['a', 'b', 'd']);
-    expect(ids(filterModerationQuestions(sample, { searchText: 'PRICING' }))).toEqual(['a', 'b', 'd']);
-    expect(ids(filterModerationQuestions(sample, { searchText: 'support' }))).toEqual(['c']);
+    expect(
+      ids(filterModerationQuestions(sample, { searchText: 'pricing' })),
+    ).toEqual(['a', 'b', 'd']);
+    expect(
+      ids(filterModerationQuestions(sample, { searchText: 'PRICING' })),
+    ).toEqual(['a', 'b', 'd']);
+    expect(
+      ids(filterModerationQuestions(sample, { searchText: 'support' })),
+    ).toEqual(['c']);
   });
 
   it('combines status + category + search with AND (narrows correctly)', () => {
@@ -288,13 +353,19 @@ describe('filterModerationQuestions', () => {
   it('preserves input order in the output', () => {
     const reordered: ModerationQuestion[] = [sample[4], sample[0], sample[1]]; // e, a, b
     // category=Pricing keeps a and b, in their input order (a before b).
-    expect(ids(filterModerationQuestions(reordered, { category: 'Pricing' }))).toEqual(['a', 'b']);
+    expect(
+      ids(filterModerationQuestions(reordered, { category: 'Pricing' })),
+    ).toEqual(['a', 'b']);
   });
 
   it('does not mutate its input array', () => {
     const input = [...sample];
     const snapshot = JSON.parse(JSON.stringify(input));
-    filterModerationQuestions(input, { status: 'pending', category: 'Pricing', searchText: 'pricing' });
+    filterModerationQuestions(input, {
+      status: 'pending',
+      category: 'Pricing',
+      searchText: 'pricing',
+    });
     expect(input).toHaveLength(snapshot.length);
     expect(input).toEqual(snapshot);
   });
@@ -363,7 +434,9 @@ describe('moderateQuestion — error mapping', () => {
 
   it('maps a 404 response to kind "not_found"', async () => {
     invokeMock.mockResolvedValue(
-      httpError(404, { error: { code: 'question_not_found', message: 'gone' } }),
+      httpError(404, {
+        error: { code: 'question_not_found', message: 'gone' },
+      }),
     );
     await expect(
       moderateQuestion({ questionId: 'missing', action: 'hide' }),
@@ -372,7 +445,9 @@ describe('moderateQuestion — error mapping', () => {
 
   it('maps a 400 response to kind "validation"', async () => {
     invokeMock.mockResolvedValue(
-      httpError(400, { error: { code: 'validation_failed', message: 'bad action' } }),
+      httpError(400, {
+        error: { code: 'validation_failed', message: 'bad action' },
+      }),
     );
     await expect(
       moderateQuestion({ questionId: 'q-1', action: 'feature' }),

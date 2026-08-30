@@ -84,7 +84,10 @@ describe('Feature: mss-livepulse, Property 1: One active vote per participant pe
             if (activeVotes.has(op.participant)) {
               // Duplicate cast: MUST be rejected and MUST leave count unchanged.
               expect(() =>
-                model.castVote({ questionId: qid, participant: op.participant }),
+                model.castVote({
+                  questionId: qid,
+                  participant: op.participant,
+                }),
               ).toThrow(QaRuleError);
               expect(model.getQuestion(qid)!.voteCount).toBe(before);
             } else {
@@ -106,7 +109,10 @@ describe('Feature: mss-livepulse, Property 1: One active vote per participant pe
               activeVotes.delete(op.participant);
             } else {
               expect(() =>
-                model.removeVote({ questionId: qid, participant: op.participant }),
+                model.removeVote({
+                  questionId: qid,
+                  participant: op.participant,
+                }),
               ).toThrow(QaRuleError);
               expect(model.getQuestion(qid)!.voteCount).toBe(before);
             }
@@ -131,9 +137,9 @@ describe('Feature: mss-livepulse, Property 1: One active vote per participant pe
     const qid = model.seedQuestion({ eventId: 'e1', status: 'approved' });
 
     expect(model.castVote({ questionId: qid, participant: 'p-a' })).toBe(1);
-    expect(() => model.castVote({ questionId: qid, participant: 'p-a' })).toThrow(
-      /already_voted/,
-    );
+    expect(() =>
+      model.castVote({ questionId: qid, participant: 'p-a' }),
+    ).toThrow(/already_voted/);
     expect(model.getQuestion(qid)!.voteCount).toBe(1);
   });
 });
@@ -171,7 +177,10 @@ describe('Feature: mss-livepulse, Property 2: Vote add/remove round trip preserv
           expect(original).toBe(others.length);
 
           // Round trip: add then remove by `actor`.
-          const afterAdd = model.castVote({ questionId: qid, participant: actor });
+          const afterAdd = model.castVote({
+            questionId: qid,
+            participant: actor,
+          });
           expect(afterAdd).toBe(original + 1);
           const afterRemove = model.removeVote({
             questionId: qid,
@@ -242,7 +251,10 @@ describe('Feature: mss-livepulse, Property 3: Vote eligibility by status', () =>
           const eligible = VOTE_ELIGIBLE_STATUSES.includes(status);
 
           if (eligible) {
-            const after = model.castVote({ questionId: qid, participant: actor });
+            const after = model.castVote({
+              questionId: qid,
+              participant: actor,
+            });
             expect(after).toBe(before + 1);
           } else {
             expect(() =>
@@ -261,9 +273,9 @@ describe('Feature: mss-livepulse, Property 3: Vote eligibility by status', () =>
       const model = new QaModel();
       model.setEvent('e1', { mode: 'post', live: true });
       const qid = model.seedQuestion({ eventId: 'e1', status, voteCount: 5 });
-      expect(() => model.castVote({ questionId: qid, participant: 'p-a' })).toThrow(
-        /not_eligible/,
-      );
+      expect(() =>
+        model.castVote({ questionId: qid, participant: 'p-a' }),
+      ).toThrow(/not_eligible/);
       expect(model.getQuestion(qid)!.voteCount).toBe(5);
     }
   });

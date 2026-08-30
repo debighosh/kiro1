@@ -306,8 +306,8 @@ an optimized/throttled aggregate broadcast) rather than relying solely on per-ro
 avoid replication lag under peak voting while keeping the 2-second delivery target. See design
 Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
 
-- [ ] 11. Add the Q&A data model (questions + question_votes migrations)
-  - [ ] 11.1 Add the `question_status` enum and the `questions` table migration
+- [x] 11. Add the Q&A data model (questions + question_votes migrations)
+  - [x] 11.1 Add the `question_status` enum and the `questions` table migration
     - Create migration `20260101000009_questions.sql` (timestamp sorts AFTER
       `20260101000008_admin_audit_rls.sql`); add enum
       `question_status ('pending','approved','featured','answered','hidden')`; create the
@@ -324,7 +324,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.4, 3.5, 22.1, 21.18, 23.8_
     - _Design: Data Models (`questions` table; Enumerated types); Decision on deferred cluster FK_
 
-  - [ ] 11.2 Add the `questions` indexes and the idempotency uniqueness constraint
+  - [x] 11.2 Add the `questions` indexes and the idempotency uniqueness constraint
     - In the same migration add: PK on `id`; `idx_questions_event` on `event_id`;
       `idx_questions_status` on `(event_id, status)`; `idx_questions_created` on
       `(event_id, created_at)`; `idx_questions_votes` on `(event_id, vote_count DESC)`; and a
@@ -333,7 +333,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 23.3, 23.8_
     - _Design: Data Models (`questions` indexes)_
 
-  - [ ] 11.3 Add the `question_votes` table migration
+  - [x] 11.3 Add the `question_votes` table migration
     - Create migration `20260101000010_question_votes.sql`; create `question_votes` with `id`
       (uuid PK), `question_id` (uuid NOT NULL, FK → `questions(id)` ON DELETE CASCADE),
       `event_id` (uuid NOT NULL, FK → `events(id)` ON DELETE CASCADE), `participant_identifier`
@@ -343,7 +343,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 4.3, 2.5, 23.3, 21.18_
     - _Design: Data Models (`question_votes` table); DB-layer uniqueness_
 
-  - [ ]* 11.4 Extend the from-scratch schema/migration static guard for the Q&A tables
+  - [x]* 11.4 Extend the from-scratch schema/migration static guard for the Q&A tables
     - Extend the Milestone-1 static migration test (mirroring `src/db/migrations.test.ts`) to
       assert the new migrations define the `question_status` enum values, create `questions`
       with the required columns + `char_length` 1–300 and `vote_count ≥0` CHECKs + the five
@@ -353,8 +353,8 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.4, 4.3, 22.1, 23.3, 26.1_
     - _Design: Data Models; Migrations and seed data_
 
-- [ ] 12. Configure RLS for questions and question_votes
-  - [ ] 12.1 Enable RLS and add read/moderation policies for `questions`
+- [x] 12. Configure RLS for questions and question_votes
+  - [x] 12.1 Enable RLS and add read/moderation policies for `questions`
     - Create migration `20260101000011_questions_rls.sql`; enable RLS (default deny); add an
       anonymous `SELECT` policy allowed WHERE `event_is_live(event_id)` AND
       `status IN ('approved','featured')` (so `pending`/`hidden` are NEVER returned to anon —
@@ -365,7 +365,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.9, 3.10, 7.9, 21.3, 21.4, 21.5, 3.11, 3.12_
     - _Design: RLS Design (`questions` per-table policies)_
 
-  - [ ] 12.2 Enable RLS and add vote policies for `question_votes`
+  - [x] 12.2 Enable RLS and add vote policies for `question_votes`
     - In a migration `20260101000012_question_votes_rls.sql`, enable RLS (default deny); allow
       anonymous `INSERT`/`DELETE` ONLY for questions in an eligible status (`approved`/
       `featured`) on a live event (the vote RPC performs the atomic count change; the unique
@@ -374,7 +374,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 4.2, 4.3, 4.4, 4.8, 8.6, 21.3, 21.4, 21.5_
     - _Design: RLS Design (`question_votes` per-table policies)_
 
-  - [ ]* 12.3 Write env-gated RLS integration tests for questions + votes
+  - [x]* 12.3 Write env-gated RLS integration tests for questions + votes
     - Mirroring `src/db/rls.events.test.ts` (skip cleanly without `TEST_SUPABASE_*`): assert
       anon `SELECT` on `questions` returns `approved`/`featured` for a live event but NEVER
       `pending`/`hidden` and returns nothing for a non-live event; assert anon cannot `SELECT`
@@ -383,8 +383,8 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.9, 3.10, 4.3, 4.4, 8.6, 26.1_
     - _Design: RLS Design (`questions`, `question_votes`)_
 
-- [ ] 13. Implement server-side submit, vote, and rate-limiting RPCs
-  - [ ] 13.1 Add the rate-limiting groundwork (rate_events + limit helper)
+- [x] 13. Implement server-side submit, vote, and rate-limiting RPCs
+  - [x] 13.1 Add the rate-limiting groundwork (rate_events + limit helper)
     - Create migration `20260101000013_rate_limiting.sql` with a short-lived `rate_events`
       table (or KV-style structure) keyed by `participant_identifier` + coarse client
       fingerprint + action type, and a `SECURITY DEFINER` helper enforcing configurable limits
@@ -394,7 +394,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 21.13, 21.14, 21.15_
     - _Design: RLS Design (Server-side rate limiting)_
 
-  - [ ] 13.2 Implement the question-submit RPC / Edge Function
+  - [x] 13.2 Implement the question-submit RPC / Edge Function
     - Add a `SECURITY DEFINER` submit RPC (or Edge Function) that: enforces the rate limit
       (13.1); validates length 1–300 Unicode code points and sanitises/allow-lists input,
       rejecting the whole submission on failure (Req 21.9–21.12, 22.1); rejects submission when
@@ -404,7 +404,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.1, 3.2, 3.3, 3.6, 3.7, 22.1, 21.9, 21.10, 21.11, 21.12, 21.13, 23.8_
     - _Design: Request/data flows (Question submit + moderation); RLS Design (rate limiting)_
 
-  - [ ] 13.3 Implement the atomic cast/remove vote RPC
+  - [x] 13.3 Implement the atomic cast/remove vote RPC
     - Add a `SECURITY DEFINER` vote RPC that atomically inserts into `question_votes` and
       increments `questions.vote_count` (cast), or deletes the row and decrements (remove);
       rejects votes on `pending`/`hidden` or non-live events leaving the count unchanged
@@ -414,7 +414,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 4.1, 4.4, 4.5, 4.6, 4.8, 21.14, 23.8_
     - _Design: Request/data flows (Voting with realtime propagation); DB-layer uniqueness_
 
-  - [ ] 13.4 Implement and document the vote-count Realtime Broadcast fan-out (Decision D9)
+  - [x] 13.4 Implement and document the vote-count Realtime Broadcast fan-out (Decision D9)
     - Broadcast the updated `vote_count` from the vote RPC (or a lightweight trigger/channel)
       via Supabase Realtime Broadcast (or an optimized/throttled aggregate broadcast) rather
       than relying solely on per-row CDC, keeping delivery within the 2-second target under
@@ -423,7 +423,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 4.7, 23.1, 23.2_
     - _Design: Decision D9; Request/data flows (Voting)_
 
-  - [ ]* 13.5 Write unit tests for submit + vote RPC logic and rate limiting
+  - [x]* 13.5 Write unit tests for submit + vote RPC logic and rate limiting
     - Test moderation-mode status defaulting (pre → `pending`, post → `approved`); length 1–300
       boundaries + sanitisation rejection; submit rejected when event not live; `submission_key`
       idempotency (retry returns the same row, no duplicate); vote cast/remove increments/
@@ -433,7 +433,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.3, 3.6, 3.7, 4.4, 4.6, 4.8, 21.13, 21.14, 21.15, 22.1, 26.1_
     - _Design: Request/data flows; RLS Design (rate limiting)_
 
-  - [ ]* 13.6 Write property tests for voting invariants (Properties 1, 2, 3)
+  - [x]* 13.6 Write property tests for voting invariants (Properties 1, 2, 3)
     - **Property 1: One active vote per participant per question** — random vote/duplicate
       sequences; assert ≤1 vote row per `(participant, question)` and duplicate rejected with
       `vote_count` unchanged. **Validates: Requirements 4.2, 4.3, 4.4**
@@ -446,8 +446,8 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.8, 26.1_
     - _Design: Correctness Properties (Properties 1, 2, 3)_
 
-- [ ] 14. Implement anonymous participant identity and audience joining (Req 2)
-  - [ ] 14.1 Implement the participant-identifier module
+- [x] 14. Implement anonymous participant identity and audience joining (Req 2)
+  - [x] 14.1 Implement the participant-identifier module
     - Add `src/lib/participant.ts` generating a ≥128-bit random identifier via
       `crypto.getRandomValues` under a namespaced `localStorage` key on first entry; reuse the
       stored identifier on re-entry; fall back to a session-scoped identifier (in-memory /
@@ -456,21 +456,21 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 2.3, 2.4, 2.5, 2.7, 8.6, 24.8_
     - _Design: Frontend Design (Participant identity handling)_
 
-  - [ ]* 14.2 Write unit tests for participant-identifier generation/reuse/fallback
+  - [x]* 14.2 Write unit tests for participant-identifier generation/reuse/fallback
     - Assert ≥128-bit entropy on first generation; reuse of the stored value on re-entry; a
       new value is NOT generated when one already exists; session-scoped fallback when
       `localStorage` throws; and that the value is never surfaced through a UI-facing accessor
     - _Requirements: 2.3, 2.4, 2.7, 8.6, 26.1_
     - _Design: Frontend Design (Participant identity handling)_
 
-  - [ ] 14.3 Implement the landing event-code entry and join resolution
+  - [x] 14.3 Implement the landing event-code entry and join resolution
     - Build the `/` landing event-code entry and the `/join/:eventRef` flow using an
       `EventJoinCard`: resolve the event by slug/URL/QR; on an unknown code reject the join,
       show an "Event_Code is invalid" error, and keep the participant on the landing page
     - _Requirements: 2.1, 2.2_
     - _Design: Frontend Design (Route map — `/`, `/join/:eventRef`); Components (`EventJoinCard`)_
 
-  - [ ] 14.4 Implement the audience event view and participation gating
+  - [x] 14.4 Implement the audience event view and participation gating
     - Build `/e/:eventRef` showing event name, status, current active interaction, and
       navigation to the Q&A / poll / word-cloud views within 3 s; when the event is not live,
       display the status and withhold all participation controls using the existing
@@ -478,22 +478,22 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 2.6, 2.8, 1.9_
     - _Design: Frontend Design (Route map — `/e/:eventRef`); Request/data flows (Audience join)_
 
-- [ ] 15. Implement the audience Live Q&A + voting UI (Req 3, 4)
-  - [ ] 15.1 Implement `QuestionSubmissionForm`
+- [x] 15. Implement the audience Live Q&A + voting UI (Req 3, 4)
+  - [x] 15.1 Implement `QuestionSubmissionForm`
     - Build a validated 1–300 char question input that calls the submit RPC (task 13.2), shows
       the four UX states, retains entered text on a validation error identifying the 1–300 char
       constraint, and shows a success confirmation within 2 s of a successful submission
     - _Requirements: 3.1, 3.2, 3.13, 22.1, 24.7_
     - _Design: Components (`QuestionSubmissionForm`); Request/data flows (Question submit)_
 
-  - [ ] 15.2 Implement `QuestionListAndVoting`
+  - [x] 15.2 Implement `QuestionListAndVoting`
     - List `approved`/`featured` questions with a sort control (most votes desc / most recent
       desc); render an upvote/remove control that calls the vote RPC (task 13.3) enforcing one
       active vote per participant per question; never render `participant_identifier`
     - _Requirements: 3.9, 3.11, 4.1, 4.5, 8.6_
     - _Design: Components (`QuestionListAndVoting`); Request/data flows (Voting)_
 
-  - [ ] 15.3 Implement the `useRealtimeChannel` hook and `ConnectionStatusIndicator`
+  - [x] 15.3 Implement the `useRealtimeChannel` hook and `ConnectionStatusIndicator`
     - Add a `useRealtimeChannel` hook subscribing ONLY to `questions` + vote-count updates
       (via the CDC/Broadcast path from 13.4) scoped by `event_id` (never the full dataset);
       show a reconnecting indicator + enabled manual-refresh control after >3 s interruption;
@@ -503,7 +503,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Design: Frontend Design (Realtime subscription strategy & reconnect UX); Components
       (`ConnectionStatusIndicator`)_
 
-  - [ ]* 15.4 Write unit tests for the realtime hook and Q&A voting UI
+  - [x]* 15.4 Write unit tests for the realtime hook and Q&A voting UI
     - Test reconnect indicator appears after >3 s; backoff sequence 1→2→4→…→30 s capped, max 5
       attempts, then error state with manual refresh enabled; question sort ordering (votes vs
       recent); upvote toggles the vote RPC call and one-active-vote behaviour; no
@@ -511,15 +511,15 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.11, 4.1, 4.5, 8.6, 23.5, 23.6, 23.7, 26.1_
     - _Design: Frontend Design (Realtime subscription strategy); Components_
 
-- [ ] 16. Implement the admin moderation queue (Req 3.11, 3.12)
-  - [ ] 16.1 Implement the authenticated moderation-mutation Edge Function / RPC
+- [x] 16. Implement the admin moderation queue (Req 3.11, 3.12)
+  - [x] 16.1 Implement the authenticated moderation-mutation Edge Function / RPC
     - Add an admin-only (service role, JWT-verified) function to approve/feature/answer/hide a
       question for the admin's own event; each moderation change writes an `audit_log` entry
       with `change_type='moderation'` (UTC timestamp); anonymous callers are denied
     - _Requirements: 3.11, 3.12, 10.1, 21.6, 21.19_
     - _Design: Architecture (privileged mutation Edge Functions); Data Models (`audit_log`)_
 
-  - [ ] 16.2 Build the `ModerationQueue` route and component
+  - [x] 16.2 Build the `ModerationQueue` route and component
     - Build `/admin/events/:id/moderation` listing questions (including `pending`/`hidden` via
       the authenticated read path) with status / AI-category / search-text filters (all
       selected criteria combined, case-insensitive search) and approve/feature/answer/hide
@@ -528,15 +528,15 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Design: Frontend Design (Route map — `/admin/events/:id/moderation`); Components
       (`ModerationQueue`)_
 
-  - [ ]* 16.3 Write unit tests for moderation authorisation and filtering
+  - [x]* 16.3 Write unit tests for moderation authorisation and filtering
     - Assert anonymous/unauthenticated moderation attempts are denied with no state change
       (Req 10.5); assert the filter combines status + category + case-insensitive search text;
       assert each moderation action requests an `audit_log` `change_type='moderation'` entry
     - _Requirements: 3.11, 3.12, 10.5, 21.19, 26.1_
     - _Design: Components (`ModerationQueue`); RLS Design_
 
-- [ ] 17. Implement the basic presenter question view (Req 7 subset for M2)
-  - [ ] 17.1 Build the basic presenter question modes
+- [x] 17. Implement the basic presenter question view (Req 7 subset for M2)
+  - [x] 17.1 Build the basic presenter question modes
     - Extend `/present/:eventRef` (token- or session-scoped read path) with the join screen
       (QR + Event_Code), featured-question, and top-questions modes needed for the Q&A demo;
       exclude `pending`/`hidden` questions from every mode; update via realtime within 2 s and
@@ -546,7 +546,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Design: Request/data flows (Presenter mode switching); Frontend Design (Route map —
       `/present/:eventRef`)_
 
-  - [ ]* 17.2 Write property + unit tests for presenter/audience moderation visibility (Property 10)
+  - [x]* 17.2 Write property + unit tests for presenter/audience moderation visibility (Property 10)
     - **Property 10: Moderation visibility invariant** — generate questions across all statuses;
       compute audience and presenter visible sets via the RLS-backed read path; assert neither
       set contains any `pending`/`hidden` question (only `approved`/`featured`, and `answered`
@@ -555,7 +555,7 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 3.9, 3.10, 7.9, 26.1_
     - _Design: Correctness Properties (Property 10); RLS Design (`questions`)_
 
-  - [ ]* 17.3 Write a property test for the participation-write portion of Property 11
+  - [x]* 17.3 Write a property test for the participation-write portion of Property 11
     - **Property 11: Event-status gating of participation** — generate events across all
       statuses; attempt each participation WRITE (question submit, vote) via the submit/vote
       RPC path; assert acceptance iff the event status is `live`, rejection otherwise
@@ -564,8 +564,8 @@ Decision D9 and the Voting flow. _Requirements: 4.1, 4.7, 23.1, 23.2_.
     - _Requirements: 1.7, 1.9, 2.8, 3.3, 4.8, 26.1_
     - _Design: Correctness Properties (Property 11); RLS Design (`events`, `questions`)_
 
-- [ ] 18. Milestone 2 checkpoint — verify Core Live Q&A completeness
-  - [ ] 18.1 Verify the Milestone 2 definition of done
+- [x] 18. Milestone 2 checkpoint — verify Core Live Q&A completeness
+  - [x] 18.1 Verify the Milestone 2 definition of done
     - Confirm the questions/question_votes migrations + RLS build from a fresh database (static
       guard extended); confirm RLS hides `pending`/`hidden` from anon/presenter and denies raw
       vote-row reads (tests); confirm duplicate votes are prevented by the DB unique constraint;

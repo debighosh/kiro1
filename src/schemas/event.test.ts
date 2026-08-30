@@ -24,7 +24,9 @@ const STARTS_AT = '2026-01-01T10:00:00.000Z';
 const ENDS_AT = '2026-01-01T12:00:00.000Z';
 
 /** A minimal valid create-input payload; individual tests override one field. */
-function validInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function validInput(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     name: 'MSS AI Demo Day 2026',
     starts_at: STARTS_AT,
@@ -34,7 +36,9 @@ function validInput(overrides: Record<string, unknown> = {}): Record<string, unk
 }
 
 /** Returns the set of dotted field paths that failed validation. */
-function failedPaths(result: ReturnType<typeof eventCreateInputSchema.safeParse>): string[] {
+function failedPaths(
+  result: ReturnType<typeof eventCreateInputSchema.safeParse>,
+): string[] {
   if (result.success) {
     return [];
   }
@@ -78,7 +82,9 @@ describe('eventCreateInputSchema — name (Req 1.1)', () => {
   });
 
   it('rejects a whitespace-only name (trimmed to empty) against the name field', () => {
-    const result = eventCreateInputSchema.safeParse(validInput({ name: '   ' }));
+    const result = eventCreateInputSchema.safeParse(
+      validInput({ name: '   ' }),
+    );
     expect(result.success).toBe(false);
     expect(failedPaths(result)).toContain('name');
   });
@@ -102,7 +108,9 @@ describe('eventCreateInputSchema — name (Req 1.1)', () => {
 describe('eventCreateInputSchema — description (Req 1.1)', () => {
   it('accepts a description of exactly 500 code points', () => {
     const description = 'd'.repeat(EVENT_DESCRIPTION_MAX);
-    const result = eventCreateInputSchema.safeParse(validInput({ description }));
+    const result = eventCreateInputSchema.safeParse(
+      validInput({ description }),
+    );
     expect(result.success).toBe(true);
   });
 
@@ -113,7 +121,9 @@ describe('eventCreateInputSchema — description (Req 1.1)', () => {
 
   it('rejects a description of 501 code points against the description field', () => {
     const description = 'd'.repeat(EVENT_DESCRIPTION_MAX + 1);
-    const result = eventCreateInputSchema.safeParse(validInput({ description }));
+    const result = eventCreateInputSchema.safeParse(
+      validInput({ description }),
+    );
     expect(result.success).toBe(false);
     expect(failedPaths(result)).toContain('description');
   });

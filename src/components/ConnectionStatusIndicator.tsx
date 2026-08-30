@@ -65,7 +65,12 @@ export function ConnectionStatusIndicator({
     // Healthy: nothing visible, but announce the state politely for AT (an
     // sr-only status region keeps the surface uncluttered — Req 24.5).
     return (
-      <p className="sr-only" role="status" aria-live="polite" data-testid="connection-status-connected">
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        data-testid="connection-status-connected"
+      >
         Connected to live updates.
       </p>
     );
@@ -79,7 +84,9 @@ export function ConnectionStatusIndicator({
       // announced politely so it does not interrupt (Req 24.5).
       role={isError ? 'alert' : 'status'}
       aria-live={isError ? 'assertive' : 'polite'}
-      data-testid={isError ? 'connection-status-error' : 'connection-status-reconnecting'}
+      data-testid={
+        isError ? 'connection-status-error' : 'connection-status-reconnecting'
+      }
       className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ink-muted/40 bg-surface px-3 py-2"
     >
       {/* Status conveyed as TEXT, never colour alone (Req 24.5). */}

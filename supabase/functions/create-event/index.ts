@@ -49,7 +49,11 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
-import { errorResponse, type FieldError, jsonResponse } from '../_shared/http.ts';
+import {
+  errorResponse,
+  type FieldError,
+  jsonResponse,
+} from '../_shared/http.ts';
 
 // -----------------------------------------------------------------------------
 // Validation contract — Deno-side mirror of `src/schemas/event.ts` (task 7.1).
@@ -136,7 +140,10 @@ const eventInputFields = z.object({
 const eventCreateInputSchema = eventInputFields.refine(
   (data) =>
     new Date(data.ends_at).getTime() > new Date(data.starts_at).getTime(),
-  { message: 'End datetime must be later than the start datetime.', path: ['ends_at'] },
+  {
+    message: 'End datetime must be later than the start datetime.',
+    path: ['ends_at'],
+  },
 );
 
 type EventCreateInput = z.infer<typeof eventCreateInputSchema>;
@@ -197,7 +204,10 @@ const DEFAULT_SITE_URL = 'http://127.0.0.1:5173';
 
 function resolveSiteUrl(req: Request): string {
   const configured = Deno.env.get('PUBLIC_SITE_URL');
-  const base = (configured && configured.trim()) || req.headers.get('Origin') || DEFAULT_SITE_URL;
+  const base =
+    (configured && configured.trim()) ||
+    req.headers.get('Origin') ||
+    DEFAULT_SITE_URL;
   // Normalise: drop any trailing slash so path joins are unambiguous.
   return base.replace(/\/+$/, '');
 }
@@ -345,9 +355,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     status: 'draft', // explicit; matches the DB default (Req 1.5)
     presenter_token: presenterToken,
   };
-  if (input.description !== undefined) insertRow.description = input.description;
+  if (input.description !== undefined)
+    insertRow.description = input.description;
   if (slug !== null) insertRow.slug = slug;
-  if (input.brand_colour !== undefined) insertRow.brand_colour = input.brand_colour;
+  if (input.brand_colour !== undefined)
+    insertRow.brand_colour = input.brand_colour;
   if (input.logo_path !== undefined) insertRow.logo_path = input.logo_path;
 
   // 5) Insert via the SERVICE-ROLE client (bypasses RLS; authorisation already
@@ -370,7 +382,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         slug
           ? `The event code "${slug}" is already in use by another event.`
           : 'A unique field value is already in use by another event.',
-        slug ? [{ field: 'slug', message: 'This event code is already in use.' }] : undefined,
+        slug
+          ? [{ field: 'slug', message: 'This event code is already in use.' }]
+          : undefined,
       );
     }
     // Any other DB error: do not leak internals (design: no error leaks details).

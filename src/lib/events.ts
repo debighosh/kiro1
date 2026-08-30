@@ -170,10 +170,10 @@ function toEventError(status: number, body: EdgeErrorBody): EventError {
   const fields = body.error.fields ?? [];
 
   if (status === 401 || code === 'unauthorized') {
-    return new EventError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized', status },
-    );
+    return new EventError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+      status,
+    });
   }
   if (status === 409 || code === 'slug_conflict') {
     // Surface the conflict on the slug field so the editor can render it inline
@@ -299,7 +299,6 @@ export async function createEvent(
   return data;
 }
 
-
 // =============================================================================
 // Event status-transition helper (Task 8.2)
 // =============================================================================
@@ -319,7 +318,8 @@ export async function createEvent(
 import type { EventStatus } from './eventStatus';
 
 /** Name of the authenticated status-transition Edge Function (task 7.3). */
-export const TRANSITION_EVENT_STATUS_FUNCTION = 'transition-event-status' as const;
+export const TRANSITION_EVENT_STATUS_FUNCTION =
+  'transition-event-status' as const;
 
 /**
  * The subset of the event echoed back by the `transition-event-status` Edge
@@ -388,7 +388,11 @@ function toTransitionError(status: number, body: EdgeErrorBody): EventError {
       status,
     });
   }
-  if (status === 400 || code === 'validation_failed' || code === 'invalid_json') {
+  if (
+    status === 400 ||
+    code === 'validation_failed' ||
+    code === 'invalid_json'
+  ) {
     return new EventError(message ?? 'The request was invalid.', {
       kind: 'validation',
       status,

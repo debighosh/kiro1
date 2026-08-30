@@ -73,8 +73,18 @@ describe('QrDisplay', () => {
     // proving the QR resolves to the current audience URL.
     const otherUrl = 'https://livepulse.example.com/join/other-event';
     const [firstExpected, secondExpected] = await Promise.all([
-      QRCode.toString(AUDIENCE_URL, { type: 'svg', errorCorrectionLevel: 'M', margin: 1, width: 320 }),
-      QRCode.toString(otherUrl, { type: 'svg', errorCorrectionLevel: 'M', margin: 1, width: 320 }),
+      QRCode.toString(AUDIENCE_URL, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320,
+      }),
+      QRCode.toString(otherUrl, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320,
+      }),
     ]);
     expect(firstExpected).not.toEqual(secondExpected);
 

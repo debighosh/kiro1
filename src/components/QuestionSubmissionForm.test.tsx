@@ -49,7 +49,8 @@ vi.mock('../lib/questions', () => {
     submitQuestion: (...args: unknown[]) => submitQuestion(...args),
     QuestionError,
     QUESTION_TEXT_MAX: 300,
-    QUESTION_LENGTH_MESSAGE: 'Your question must be between 1 and 300 characters.',
+    QUESTION_LENGTH_MESSAGE:
+      'Your question must be between 1 and 300 characters.',
     countQuestionCodePoints: (v: string) => [...v].length,
   };
 });
@@ -207,9 +208,7 @@ describe('QuestionSubmissionForm — server error mapping (Req 3.2, 24.7)', () =
     );
     await user.click(screen.getByRole('button', { name: /submit question/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /too fast/i,
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(/too fast/i);
   });
 });
 
@@ -231,7 +230,9 @@ describe('QuestionSubmissionForm — submitting state (Req 24.7)', () => {
       screen.getByRole('textbox', { name: /ask a question/i }),
       'In-flight question',
     );
-    const submit = screen.getByRole('button', { name: /submitting|submit question/i });
+    const submit = screen.getByRole('button', {
+      name: /submitting|submit question/i,
+    });
     await user.click(submit);
 
     // While submitting: button disabled + aria-busy set.

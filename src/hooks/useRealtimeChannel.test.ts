@@ -90,7 +90,9 @@ describe('backoffDelayMs (Req 23.6)', () => {
 
 describe('useRealtimeChannel', () => {
   it('opens an event-scoped subscription and starts connected', () => {
-    const { result } = renderHook(() => useRealtimeChannel({ eventId: EVENT_ID }));
+    const { result } = renderHook(() =>
+      useRealtimeChannel({ eventId: EVENT_ID }),
+    );
 
     expect(subscribeToEventQuestions).toHaveBeenCalledTimes(1);
     expect(subscribeToEventQuestions.mock.calls[0][0]).toBe(EVENT_ID);
@@ -99,7 +101,9 @@ describe('useRealtimeChannel', () => {
   });
 
   it('does NOT flip to reconnecting for a blip that recovers within the 3s grace (Req 23.5)', async () => {
-    const { result } = renderHook(() => useRealtimeChannel({ eventId: EVENT_ID }));
+    const { result } = renderHook(() =>
+      useRealtimeChannel({ eventId: EVENT_ID }),
+    );
 
     // Report interrupted, then recover before the grace elapses.
     act(() => {
@@ -122,7 +126,9 @@ describe('useRealtimeChannel', () => {
   });
 
   it('flips to reconnecting only after a >3s interruption (Req 23.5)', async () => {
-    const { result } = renderHook(() => useRealtimeChannel({ eventId: EVENT_ID }));
+    const { result } = renderHook(() =>
+      useRealtimeChannel({ eventId: EVENT_ID }),
+    );
 
     act(() => {
       latestHandlers().onConnectionChange?.(true);
@@ -141,7 +147,9 @@ describe('useRealtimeChannel', () => {
   });
 
   it('retries on the backoff schedule and enters terminal error after MAX_ATTEMPTS (Req 23.6, 23.7)', async () => {
-    const { result } = renderHook(() => useRealtimeChannel({ eventId: EVENT_ID }));
+    const { result } = renderHook(() =>
+      useRealtimeChannel({ eventId: EVENT_ID }),
+    );
 
     const openCountAfterInitial = subscribeToEventQuestions.mock.calls.length;
     expect(openCountAfterInitial).toBe(1);
@@ -233,7 +241,9 @@ describe('useRealtimeChannel', () => {
   });
 
   it('clears the reconnecting state when the channel recovers (onConnectionChange(false))', async () => {
-    const { result } = renderHook(() => useRealtimeChannel({ eventId: EVENT_ID }));
+    const { result } = renderHook(() =>
+      useRealtimeChannel({ eventId: EVENT_ID }),
+    );
 
     act(() => {
       latestHandlers().onConnectionChange?.(true);

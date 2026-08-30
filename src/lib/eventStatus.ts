@@ -70,7 +70,10 @@ export const CAN_REACTIVATE_ARCHIVED = false as const;
  * transition. A no-op (`from === to`) is NOT an allowed transition (it is a
  * conflict — see {@link classifyTransition}).
  */
-export function isAllowedTransition(from: EventStatus, to: EventStatus): boolean {
+export function isAllowedTransition(
+  from: EventStatus,
+  to: EventStatus,
+): boolean {
   return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
@@ -89,10 +92,7 @@ export function isAllowedTransition(from: EventStatus, to: EventStatus): boolean
  *                                   states or going backwards).
  */
 export type TransitionClassification =
-  | 'allowed'
-  | 'no_op'
-  | 'archived_not_reactivatable'
-  | 'invalid';
+  'allowed' | 'no_op' | 'archived_not_reactivatable' | 'invalid';
 
 /**
  * Classifies a requested transition using the SAME ordered decision branches as

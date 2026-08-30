@@ -45,7 +45,12 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
-import { QaModel, QaRuleError, type ModerationMode, type QuestionStatus } from './qaRules';
+import {
+  QaModel,
+  QaRuleError,
+  type ModerationMode,
+  type QuestionStatus,
+} from './qaRules';
 
 /**
  * The complete `event_status` enum — canonical codebase values (see file
@@ -73,7 +78,9 @@ describe('Feature: mss-livepulse, Property 11: Event-status gating of participat
         fc.constantFrom<ModerationMode>('pre', 'post'),
         // A guaranteed-valid 1–300 code-point question text so the ONLY thing
         // that can reject the write is the event-status gate.
-        fc.string({ minLength: 1, maxLength: 300 }).map((s) => `q ${s.replace(/\s+/g, ' ')} ?`),
+        fc
+          .string({ minLength: 1, maxLength: 300 })
+          .map((s) => `q ${s.replace(/\s+/g, ' ')} ?`),
         fc.string({ minLength: 1, maxLength: 40 }),
         (status, mode, text, participant) => {
           const eventId = `event-${status}`;
@@ -137,7 +144,9 @@ describe('Feature: mss-livepulse, Property 11: Event-status gating of participat
           // Property: accepted iff the event is live.
           expect(accepted).toBe(statusIsLive(status));
           // And the count only moved when the write was accepted.
-          expect(model.getQuestion(questionId)!.voteCount).toBe(accepted ? 1 : 0);
+          expect(model.getQuestion(questionId)!.voteCount).toBe(
+            accepted ? 1 : 0,
+          );
         },
       ),
       { numRuns: 300 },
@@ -159,14 +168,22 @@ describe('Feature: mss-livepulse, Property 11: Event-status gating of participat
 
       // Submit attempt.
       try {
-        model.submitQuestion({ eventId, participant: 'p-submit', text: 'A valid question?' });
+        model.submitQuestion({
+          eventId,
+          participant: 'p-submit',
+          text: 'A valid question?',
+        });
         submitAcceptedFor.push(status);
       } catch (err) {
         expect((err as QaRuleError).signal).toBe('event_not_live');
       }
 
       // Vote attempt on an eligible (approved) question.
-      const qid = model.seedQuestion({ eventId, status: 'approved', voteCount: 0 });
+      const qid = model.seedQuestion({
+        eventId,
+        status: 'approved',
+        voteCount: 0,
+      });
       try {
         model.castVote({ questionId: qid, participant: 'p-vote' });
         voteAcceptedFor.push(status);

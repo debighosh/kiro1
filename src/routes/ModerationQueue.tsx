@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   filterModerationQuestions,
@@ -74,13 +68,14 @@ const STATUS_LABELS: Readonly<Record<ModerationQuestionStatus, string>> = {
 };
 
 /** The action that would be a no-op for a question already in a given status. */
-const STATUS_FOR_ACTION: Readonly<Record<ModerationAction, ModerationQuestionStatus>> =
-  {
-    approve: 'approved',
-    feature: 'featured',
-    answer: 'answered',
-    hide: 'hidden',
-  };
+const STATUS_FOR_ACTION: Readonly<
+  Record<ModerationAction, ModerationQuestionStatus>
+> = {
+  approve: 'approved',
+  feature: 'featured',
+  answer: 'answered',
+  hide: 'hidden',
+};
 
 export function ModerationQueue(): JSX.Element {
   const { id: eventId } = useParams();
@@ -95,9 +90,9 @@ export function ModerationQueue(): JSX.Element {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Filter controls. Empty string means "no filter" for each.
-  const [statusFilter, setStatusFilter] = useState<'' | ModerationQuestionStatus>(
-    '',
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    '' | ModerationQuestionStatus
+  >('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [searchText, setSearchText] = useState<string>('');
 

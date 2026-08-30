@@ -300,7 +300,6 @@ describe('Milestone 1 schema / migrations', () => {
   });
 });
 
-
 /**
  * Task 11.4 — Milestone 2 (Core Live Q&A) schema / migration verification.
  *
@@ -368,9 +367,7 @@ describe('Milestone 2 schema / migrations (Q&A tables)', () => {
   describe('question_status enum', () => {
     it('defines question_status with exactly the five lifecycle values', () => {
       const sql = flat[QUESTIONS_FILE];
-      const m = sql.match(
-        /CREATE TYPE question_status AS ENUM \(([^)]*)\)/i,
-      );
+      const m = sql.match(/CREATE TYPE question_status AS ENUM \(([^)]*)\)/i);
       expect(m).not.toBeNull();
       const values = m![1];
       const expected = [

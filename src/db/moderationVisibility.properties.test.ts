@@ -79,7 +79,9 @@ interface QuestionRow {
   readonly status: QuestionStatus;
 }
 
-const statusArb: fc.Arbitrary<QuestionStatus> = fc.constantFrom(...ALL_STATUSES);
+const statusArb: fc.Arbitrary<QuestionStatus> = fc.constantFrom(
+  ...ALL_STATUSES,
+);
 
 /**
  * An arbitrary set of question rows spanning ALL statuses. Ids are unique per
@@ -128,7 +130,9 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant',
         // set, no matter how many were generated.
         for (const row of [...audience, ...presenter]) {
           expect(NEVER_VISIBLE_STATUSES).not.toContain(row.status);
-          expect(row.status === 'pending' || row.status === 'hidden').toBe(false);
+          expect(row.status === 'pending' || row.status === 'hidden').toBe(
+            false,
+          );
         }
 
         // Positive direction: every visible row is one of the allowed statuses.
@@ -145,7 +149,9 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant',
   it('the audience visible set matches an independent reference predicate exactly (live event)', () => {
     fc.assert(
       fc.property(questionRowsArb, (rows) => {
-        const audienceIds = new Set(visibleQuestions(rows, true).map((r) => r.id));
+        const audienceIds = new Set(
+          visibleQuestions(rows, true).map((r) => r.id),
+        );
         const expectedIds = new Set(
           rows.filter((r) => audienceVisibleRef(r, true)).map((r) => r.id),
         );
@@ -159,7 +165,11 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant',
       fc.property(questionRowsArb, (rows) => {
         expect(visibleQuestions(rows, /* eventLive */ false)).toHaveLength(0);
         expect(
-          visibleQuestions(rows, /* eventLive */ false, PRESENTER_PRESENTABLE_STATUSES),
+          visibleQuestions(
+            rows,
+            /* eventLive */ false,
+            PRESENTER_PRESENTABLE_STATUSES,
+          ),
         ).toHaveLength(0);
       }),
     );
@@ -168,8 +178,14 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant',
   it('the presenter visible set is always a SUBSET of the audience visible set (presenter never widens)', () => {
     fc.assert(
       fc.property(questionRowsArb, fc.boolean(), (rows, eventLive) => {
-        const audienceIds = new Set(visibleQuestions(rows, eventLive).map((r) => r.id));
-        const presenter = visibleQuestions(rows, eventLive, PRESENTER_PRESENTABLE_STATUSES);
+        const audienceIds = new Set(
+          visibleQuestions(rows, eventLive).map((r) => r.id),
+        );
+        const presenter = visibleQuestions(
+          rows,
+          eventLive,
+          PRESENTER_PRESENTABLE_STATUSES,
+        );
         for (const row of presenter) {
           expect(audienceIds.has(row.id)).toBe(true);
         }
@@ -208,7 +224,9 @@ describe('moderation-visibility rule (isModerationVisible) — unit examples', (
     );
     expect(AUDIENCE_VISIBLE_STATUSES).not.toContain('pending');
     expect(AUDIENCE_VISIBLE_STATUSES).not.toContain('hidden');
-    expect([...NEVER_VISIBLE_STATUSES].sort()).toEqual(['hidden', 'pending'].sort());
+    expect([...NEVER_VISIBLE_STATUSES].sort()).toEqual(
+      ['hidden', 'pending'].sort(),
+    );
   });
 
   it('the presenter allow-list agrees with the audience-visible set for Milestone 2', () => {
