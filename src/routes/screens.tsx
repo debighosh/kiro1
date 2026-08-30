@@ -32,6 +32,8 @@ import { EventJoinCard } from '../components/EventJoinCard';
 import { QrDisplay } from '../components/QrDisplay';
 import { QuestionSubmissionForm } from '../components/QuestionSubmissionForm';
 import { QuestionListAndVoting } from '../components/QuestionListAndVoting';
+import { PollCard } from '../components/PollCard';
+import { WordCloudCard } from '../components/WordCloudCard';
 import { ConnectionStatusIndicator } from '../components/ConnectionStatusIndicator';
 import { useRealtimeChannel } from '../hooks/useRealtimeChannel';
 
@@ -153,10 +155,11 @@ const EVENT_STATUS_LABEL: Record<PublicEvent['status'], string> = {
 };
 
 /**
- * The three audience interaction views the event exposes (Req 2.6). For
- * Milestone 2 only the Q&A section hosts a real UI (tasks 15.x); the poll and
- * word-cloud sections are announced as "coming up" placeholders here. Each is a
- * clearly-marked mount point later tasks slot their widgets into.
+ * The three audience interaction views the event exposes (Req 2.6). Each hosts
+ * a real UI for a live/eligible event: the Q&A section (tasks 15.x), the poll
+ * section ({@link PollCard}, tasks 23.1/23.2), and the word-cloud section
+ * ({@link WordCloudCard}, tasks 23.3/23.4). The participant switches between
+ * them via the accessible tablist.
  */
 const INTERACTION_VIEWS = [
   { key: 'qa', label: 'Q&A', suffix: 'qa' },
@@ -425,22 +428,36 @@ export function EventView(): JSX.Element {
           className="flex flex-col gap-4"
         >
           {activeView === 'qa' ? (
-            /* Q&A section container (Req 2.6). For M2 this is the clearly-marked
-               mount point that tasks 15.x (`QuestionSubmissionForm` +
+            /* Q&A section container (Req 2.6). This is the clearly-marked mount
+               point that tasks 15.x (`QuestionSubmissionForm` +
                `QuestionListAndVoting` + realtime) slot their real widgets into.
                Only rendered for a live/eligible event, preserving participation
                gating. */
             <LiveQaSection eventId={event.id} />
-          ) : (
-            /* Poll / word-cloud sections are "coming up" placeholders for M2. */
+          ) : activeView === 'poll' ? (
+            /* Poll section (Req 5.12, 23.2). `PollCard` owns its own
+               read/response/results/realtime (tasks 23.1/23.2) and event/poll
+               gating; it is only mounted here for a live/eligible event so
+               participation gating is preserved. The `poll-section` testid is
+               kept so existing EventView tab-switch tests still find it. */
             <div
-              data-testid={`${activeView}-section`}
+              data-testid="poll-section"
               className="rounded-lg border border-ink-muted/40 p-4"
             >
               <h2 className="text-lg font-semibold text-ink">{activeLabel}</h2>
-              <p className="mt-1 text-ink-muted">
-                This interaction is coming up. Stay tuned.
-              </p>
+              <PollCard eventId={event.id} eventStatus={event.status} />
+            </div>
+          ) : (
+            /* Word-cloud section (Req 6.15, 23.2). `WordCloudCard` owns its own
+               read/response/visualisation/realtime (tasks 23.3/23.4) and
+               gating; only mounted here for a live/eligible event so
+               participation gating is preserved. */
+            <div
+              data-testid="cloud-section"
+              className="rounded-lg border border-ink-muted/40 p-4"
+            >
+              <h2 className="text-lg font-semibold text-ink">{activeLabel}</h2>
+              <WordCloudCard eventId={event.id} eventStatus={event.status} />
             </div>
           )}
         </section>

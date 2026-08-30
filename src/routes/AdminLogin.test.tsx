@@ -120,6 +120,32 @@ vi.mock('../lib/questions', () => ({
   subscribeToEventQuestions: vi.fn(() => () => {}),
 }));
 
+// task 23.5: importing `./screens` transitively loads `PollCard` (via the
+// audience `EventView` poll tab), which imports `../lib/polls` (→ the real
+// supabase client). Stub it so the module graph stays free of the real client.
+vi.mock('../lib/polls', () => ({
+  readActivePoll: vi.fn().mockResolvedValue(null),
+  submitPollResponse: vi.fn().mockResolvedValue(undefined),
+  subscribeToPollResults: vi.fn(() => () => {}),
+  PollError: class PollError extends Error {},
+}));
+
+// task 23.5: `WordCloudCard` (mounted in the audience word-cloud tab) imports
+// `../lib/wordCloudClient` (→ the real supabase client). Stub its
+// read/write/realtime helpers + the constants/fns it imports so the module
+// graph stays env/network-free.
+vi.mock('../lib/wordCloudClient', () => ({
+  readActivePrompt: vi.fn().mockResolvedValue(null),
+  readVisibleResponses: vi.fn().mockResolvedValue([]),
+  submitWordCloudResponse: vi.fn().mockResolvedValue(undefined),
+  subscribeToWordCloud: vi.fn(() => () => {}),
+  WordCloudClientError: class WordCloudClientError extends Error {},
+  WORD_CLOUD_TEXT_MAX: 50,
+  WORD_CLOUD_LENGTH_MESSAGE:
+    'Your response must be between 1 and 50 characters.',
+  countWordCloudCodePoints: (v: string) => [...v].length,
+}));
+
 // `./screens` also imports the shared browser Supabase client directly (for the
 // `PresenterView` realtime subscription, task 17.1). Constructing the real
 // client throws without VITE_ env vars, so stub it with the minimal chainable
