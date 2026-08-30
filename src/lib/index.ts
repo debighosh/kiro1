@@ -11,3 +11,4 @@ export * from './eventStatus';
 export * from './participant';
 export * from './presenter';
 export * from './questions';
+export * from './wordcloud';
