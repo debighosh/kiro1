@@ -102,7 +102,9 @@ function trim(text: string): string {
  *
  * Trimming is applied to text fields before length-checking, matching the RPC.
  */
-function validateCreatePoll(input: CreatePollInput): CreatePollErrorSignal | null {
+function validateCreatePoll(
+  input: CreatePollInput,
+): CreatePollErrorSignal | null {
   // Question text 1–200 code points after trim (Req 5.1, 22.2).
   if (input.questionText === null || input.questionText === undefined) {
     return 'invalid_question_text';
@@ -144,7 +146,9 @@ function validateCreatePoll(input: CreatePollInput): CreatePollErrorSignal | nul
 }
 
 /** A convenient set of valid inputs to vary one field at a time in tests. */
-function validCreateInput(overrides: Partial<CreatePollInput> = {}): CreatePollInput {
+function validCreateInput(
+  overrides: Partial<CreatePollInput> = {},
+): CreatePollInput {
   return {
     questionText: 'What is your favourite colour?',
     options: ['Red', 'Blue'],
@@ -161,7 +165,9 @@ function validCreateInput(overrides: Partial<CreatePollInput> = {}): CreatePollI
 
 describe('create_poll validation: question text 1–200 boundary (Req 5.1, 22.2)', () => {
   it('accepts 1 char (lower boundary) and 200 chars (upper boundary)', () => {
-    expect(validateCreatePoll(validCreateInput({ questionText: 'a' }))).toBeNull();
+    expect(
+      validateCreatePoll(validCreateInput({ questionText: 'a' })),
+    ).toBeNull();
     expect(
       validateCreatePoll(validCreateInput({ questionText: 'x'.repeat(200) })),
     ).toBeNull();
@@ -200,14 +206,16 @@ describe('create_poll validation: option text 1–100 boundary (Req 5.1, 5.2)', 
   });
 
   it('rejects an empty / whitespace-only / 101-char / null option with invalid_option_text', () => {
-    expect(
-      validateCreatePoll(validCreateInput({ options: ['ok', ''] })),
-    ).toBe('invalid_option_text');
+    expect(validateCreatePoll(validCreateInput({ options: ['ok', ''] }))).toBe(
+      'invalid_option_text',
+    );
     expect(
       validateCreatePoll(validCreateInput({ options: ['ok', '   '] })),
     ).toBe('invalid_option_text');
     expect(
-      validateCreatePoll(validCreateInput({ options: ['ok', 'y'.repeat(101)] })),
+      validateCreatePoll(
+        validCreateInput({ options: ['ok', 'y'.repeat(101)] }),
+      ),
     ).toBe('invalid_option_text');
     expect(
       validateCreatePoll(validCreateInput({ options: ['ok', null] })),
@@ -233,9 +241,9 @@ describe('create_poll validation: option COUNT 2–10 boundary (Req 5.1, 5.2)', 
     expect(validateCreatePoll(validCreateInput({ options: [] }))).toBe(
       'invalid_option_count',
     );
-    expect(validateCreatePoll(validCreateInput({ options: ['only-one'] }))).toBe(
-      'invalid_option_count',
-    );
+    expect(
+      validateCreatePoll(validCreateInput({ options: ['only-one'] })),
+    ).toBe('invalid_option_count');
     expect(
       validateCreatePoll(
         validCreateInput({
@@ -252,7 +260,9 @@ describe('create_poll validation: option COUNT 2–10 boundary (Req 5.1, 5.2)', 
 describe('create_poll validation: results_visibility (Req 5.3) — identifies the field', () => {
   it('accepts the two enum members show_always | hide_until_closed', () => {
     expect(
-      validateCreatePoll(validCreateInput({ resultsVisibility: 'show_always' })),
+      validateCreatePoll(
+        validCreateInput({ resultsVisibility: 'show_always' }),
+      ),
     ).toBeNull();
     expect(
       validateCreatePoll(

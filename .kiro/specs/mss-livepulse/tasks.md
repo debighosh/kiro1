@@ -608,8 +608,8 @@ the latest Milestone 2 migration `20260101000016_vote_broadcast.sql` — i.e. us
 `20260101000017_*` and upward. Writes are server-mediated (SECURITY DEFINER RPCs / service-role
 Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
 
-- [ ] 19. Add the polls + word-cloud data model migrations
-  - [ ] 19.1 Add the poll enums and the `polls` table migration
+- [x] 19. Add the polls + word-cloud data model migrations
+  - [x] 19.1 Add the poll enums and the `polls` table migration
     - Create migration `20260101000017_polls.sql` (timestamp sorts AFTER
       `20260101000016_vote_broadcast.sql`); add enums `poll_status ('draft','open','closed')`
       and `poll_results_visibility ('show_always','hide_until_closed')`; create the `polls`
@@ -622,7 +622,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.1, 5.4, 22.2_
     - _Design: Data Models (`polls` table; Enumerated types `poll_status`, `poll_results_visibility`)_
 
-  - [ ] 19.2 Add the single-open-poll partial unique index and the `poll_options` table
+  - [x] 19.2 Add the single-open-poll partial unique index and the `poll_options` table
     - In the same migration add the partial unique index
       `CREATE UNIQUE INDEX one_open_poll_per_event ON polls(event_id) WHERE status='open';`
       (DB-level at-most-one-open-poll-per-event enforcement); create `poll_options` with `id`
@@ -633,7 +633,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.1, 5.2, 5.5, 23.3, 22.3_
     - _Design: Data Models (`poll_options`; `one_open_poll_per_event` partial unique index)_
 
-  - [ ] 19.3 Add the `poll_responses` table with the response-uniqueness constraint
+  - [x] 19.3 Add the `poll_responses` table with the response-uniqueness constraint
     - Create migration `20260101000018_poll_responses.sql`; create `poll_responses` with `id`
       (uuid PK), `poll_id` (uuid NOT NULL, FK → `polls(id)` ON DELETE CASCADE), `event_id`
       (uuid NOT NULL, FK → `events(id)` ON DELETE CASCADE, for RLS scoping), `option_id`
@@ -645,7 +645,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.7, 5.8, 23.3, 21.18_
     - _Design: Data Models (`poll_responses`; UNIQUE `(participant_identifier, poll_id)`)_
 
-  - [ ] 19.4 Add the `word_cloud_prompts` and `word_cloud_responses` table migrations
+  - [x] 19.4 Add the `word_cloud_prompts` and `word_cloud_responses` table migrations
     - Create migration `20260101000019_word_cloud.sql`; add enum
       `wordcloud_status ('draft','open','closed')`; create `word_cloud_prompts` with `id`
       (uuid PK), `event_id` (uuid NOT NULL, FK → `events(id)` ON DELETE CASCADE), `prompt_text`
@@ -664,7 +664,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Data Models (`word_cloud_prompts`, `word_cloud_responses`; single-open-prompt
       partial unique index; Enumerated type `wordcloud_status`)_
 
-  - [ ]* 19.5 Extend the from-scratch schema/migration static guard for the poll + word-cloud tables
+  - [x]* 19.5 Extend the from-scratch schema/migration static guard for the poll + word-cloud tables
     - Extend the static migration test (`src/db/migrations.test.ts`, mirroring the M2 task 11.4
       approach) to assert the new migrations: define the `poll_status`,
       `poll_results_visibility`, and `wordcloud_status` enum values; create `polls` with the
@@ -680,8 +680,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.1, 5.5, 5.7, 6.1, 6.5, 6.9, 23.3, 26.1_
     - _Design: Data Models; Migrations and seed data_
 
-- [ ] 20. Configure RLS for the poll and word-cloud tables
-  - [ ] 20.1 Enable RLS and add read policies for `polls` and `poll_options`
+- [x] 20. Configure RLS for the poll and word-cloud tables
+  - [x] 20.1 Enable RLS and add read policies for `polls` and `poll_options`
     - Create migration `20260101000020_polls_rls.sql`; enable RLS (default deny) on `polls` and
       `poll_options`; add an anonymous `SELECT` policy allowed WHERE `event_is_live(event_id)`
       so the audience/presenter read open + closed polls for a live event (draft polls are never
@@ -691,7 +691,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.4, 5.11, 21.3, 21.4, 21.5, 21.6_
     - _Design: RLS Design (`polls`, `poll_options` per-table policies; `event_is_live` helper)_
 
-  - [ ] 20.2 Enable RLS and add response policies for `poll_responses`
+  - [x] 20.2 Enable RLS and add response policies for `poll_responses`
     - In migration `20260101000021_poll_responses_rls.sql`, enable RLS (default deny); add NO
       anonymous `SELECT` of raw `poll_responses` rows (results are read from
       `poll_options.response_count`, so `participant_identifier` is never exposed to clients);
@@ -700,7 +700,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.7, 5.8, 8.6, 21.3, 21.4, 21.5, 21.6_
     - _Design: RLS Design (`poll_responses` per-table policies)_
 
-  - [ ] 20.3 Enable RLS and add read policies for the word-cloud tables
+  - [x] 20.3 Enable RLS and add read policies for the word-cloud tables
     - Create migration `20260101000022_word_cloud_rls.sql`; enable RLS (default deny) on
       `word_cloud_prompts` and `word_cloud_responses`; add an anonymous `SELECT` policy on
       `word_cloud_prompts` allowed WHERE `event_is_live(event_id)` (draft prompts hidden from
@@ -713,7 +713,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 6.3, 6.13, 7.9, 21.3, 21.4, 21.5, 21.6_
     - _Design: RLS Design (`word_cloud_prompts`, `word_cloud_responses` per-table policies)_
 
-  - [ ]* 20.4 Write env-gated RLS integration tests for the poll + word-cloud tables
+  - [x]* 20.4 Write env-gated RLS integration tests for the poll + word-cloud tables
     - Mirroring `src/db/rls.questions.test.ts` (skip cleanly without `TEST_SUPABASE_*`): assert
       anon `SELECT` on `polls` returns polls for a live event but nothing for a non-live event
       and never a `draft` poll; assert anon cannot `SELECT` raw `poll_responses` rows; assert
@@ -723,8 +723,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.11, 6.13, 7.9, 8.6, 26.1_
     - _Design: RLS Design (`polls`, `poll_responses`, `word_cloud_prompts`, `word_cloud_responses`)_
 
-- [ ] 21. Implement the server-side poll RPCs (create/open/close, respond)
-  - [ ] 21.1 Implement the poll create/edit RPC / Edge Function
+- [x] 21. Implement the server-side poll RPCs (create/open/close, respond)
+  - [x] 21.1 Implement the poll create/edit RPC / Edge Function
     - Add an admin-only (service role, JWT-verified) `SECURITY DEFINER` RPC (or Edge Function)
       that validates the poll question 1–200 chars and 2–10 options each 1–100 chars, a positive
       `display_order`, and a `results_visibility` of exactly `show_always` or
@@ -734,7 +734,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.1, 5.2, 5.3, 22.2, 22.3, 10.1, 21.6_
     - _Design: Architecture (privileged mutation Edge Functions); Request/data flows (Poll lifecycle)_
 
-  - [ ] 21.2 Implement the poll open/close transition RPC guarded by the single-open rule
+  - [x] 21.2 Implement the poll open/close transition RPC guarded by the single-open rule
     - Add a `SECURITY DEFINER` transition RPC enforcing `draft → open → closed`; when opening,
       rely on the `one_open_poll_per_event` partial unique index so opening a second poll while
       one is already open is rejected leaving both statuses unchanged and returning the
@@ -744,7 +744,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Request/data flows (Poll lifecycle — single-open guard); Data Models
       (`one_open_poll_per_event`)_
 
-  - [ ] 21.3 Implement the poll-response upsert-replace RPC with atomic count maintenance
+  - [x] 21.3 Implement the poll-response upsert-replace RPC with atomic count maintenance
     - Add a `SECURITY DEFINER` respond RPC that upserts on UNIQUE
       `(participant_identifier, poll_id)`: on a first response it inserts and increments the
       chosen `poll_options.response_count`; on a changed response it replaces the prior selection
@@ -756,7 +756,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.7, 5.8, 5.9, 5.10, 21.13, 21.14, 21.15, 23.8_
     - _Design: Request/data flows (Poll lifecycle — upsert replace); RLS Design (rate limiting)_
 
-  - [ ] 21.4 Implement and document the poll-results Realtime broadcast (visibility-aware)
+  - [x] 21.4 Implement and document the poll-results Realtime broadcast (visibility-aware)
     - Broadcast updated `poll_options.response_count` aggregates from the respond RPC on an
       event-scoped channel so visible poll results update on connected clients within 2 s
       without a manual refresh; the payload carries no `participant_identifier`; results for a
@@ -765,7 +765,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.11, 5.12, 23.1, 23.2_
     - _Design: Request/data flows (Poll lifecycle — Realtime when visible); Decision D9_
 
-  - [ ]* 21.5 Write unit tests for poll create/transition/respond RPC logic
+  - [x]* 21.5 Write unit tests for poll create/transition/respond RPC logic
     - Test question 1–200 and option 1–100 boundaries + 2–10 option-count boundaries + invalid
       `results_visibility` rejection identifying the field (no partial poll retained); valid
       transitions `draft→open→closed` accepted and invalid ones rejected; opening a second poll
@@ -775,7 +775,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.1, 5.2, 5.6, 5.7, 5.8, 5.9, 5.10, 21.13, 22.2, 26.1_
     - _Design: Request/data flows (Poll lifecycle)_
 
-  - [ ]* 21.6 Write property tests for poll invariants (Properties 4, 5)
+  - [x]* 21.6 Write property tests for poll invariants (Properties 4, 5)
     - **Property 4: One response per participant per poll, latest replaces earlier** — generate
       a participant and a sequence of option selections; upsert each; assert exactly one
       `poll_responses` row remains for `(participant, poll)` whose `option_id` equals the last
@@ -789,8 +789,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.5, 5.6, 5.7, 5.8, 26.1_
     - _Design: Correctness Properties (Properties 4, 5)_
 
-- [ ] 22. Implement the server-side word-cloud RPCs (prompt lifecycle, response, moderation)
-  - [ ] 22.1 Implement the word-cloud normalisation module
+- [x] 22. Implement the server-side word-cloud RPCs (prompt lifecycle, response, moderation)
+  - [x] 22.1 Implement the word-cloud normalisation module
     - Add a pure `src/lib/wordcloud.ts` (shared by client preview and the write RPC) exposing a
       `normalise(s)` that lower-cases all letters, trims leading/trailing whitespace, and
       collapses each run of consecutive internal whitespace to a single space — canonical and
@@ -802,7 +802,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Request/data flows (Word cloud — normalisation, aggregation, monotonic sizing);
       Technology Stack (d3-cloud — we own aggregation/sizing)_
 
-  - [ ] 22.2 Implement the word-cloud prompt create + open/close RPC guarded by the single-open rule
+  - [x] 22.2 Implement the word-cloud prompt create + open/close RPC guarded by the single-open rule
     - Add an admin-only (service role, JWT-verified) `SECURITY DEFINER` RPC that validates prompt
       text 1–200 chars and `max_words_per_response` 1–10, rejecting creation with the specific
       invalid field and creating no prompt on failure (Req 6.1, 6.2); creates the prompt in
@@ -813,7 +813,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Request/data flows (Word cloud — one prompt open at a time); Data Models
       (single-open-prompt partial unique index)_
 
-  - [ ] 22.3 Implement the word-cloud response upsert RPC (normalise on write, gating, rate limit)
+  - [x] 22.3 Implement the word-cloud response upsert RPC (normalise on write, gating, rate limit)
     - Add a `SECURITY DEFINER` respond RPC that upserts on UNIQUE
       `(participant_identifier, prompt_id)` while the prompt is `open`, allowing the participant
       to update the response any number of times (Req 6.6); validates length 1–50 and rejects an
@@ -824,7 +824,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 6.6, 6.7, 6.8, 6.9, 6.10, 21.13, 21.14, 21.15, 23.8_
     - _Design: Request/data flows (Word cloud — one response per participant, updatable while open)_
 
-  - [ ] 22.4 Implement the word-cloud entry hide/unhide moderation RPC and visible-aggregation broadcast
+  - [x] 22.4 Implement the word-cloud entry hide/unhide moderation RPC and visible-aggregation broadcast
     - Add an admin-only (service role, JWT-verified) RPC that sets `word_cloud_responses.is_hidden`
       for the admin's own event (Req 6.12); ensure hidden entries are excluded from all term
       aggregation and from the audience + presenter views (via the RLS read policy in task 20.3
@@ -834,7 +834,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 6.12, 6.13, 6.15, 7.9, 23.1, 23.2_
     - _Design: Request/data flows (Word cloud — hidden entries excluded, Realtime when visible)_
 
-  - [ ]* 22.5 Write unit tests for word-cloud RPC logic and moderation
+  - [x]* 22.5 Write unit tests for word-cloud RPC logic and moderation
     - Test prompt text 1–200 and `max_words_per_response` 1–10 boundaries with field-specific
       rejection (no prompt created); single-open-prompt guard rejects a second open leaving both
       unchanged; response 1–50 boundary + empty rejection retaining prior response; submit/update
@@ -844,7 +844,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 6.2, 6.4, 6.6, 6.7, 6.8, 6.12, 6.13, 6.14, 26.1_
     - _Design: Request/data flows (Word cloud)_
 
-  - [ ]* 22.6 Write property tests for word-cloud invariants (Properties 6, 7, 8, 9)
+  - [x]* 22.6 Write property tests for word-cloud invariants (Properties 6, 7, 8, 9)
     - **Property 6: One response per participant per word-cloud prompt** — repeated
       submissions/updates by one participant; assert a single `word_cloud_responses` row remains
       whose value tracks the latest update while open. **Validates: Requirements 6.6, 6.9**
@@ -866,8 +866,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 6.4, 6.5, 6.6, 6.9, 6.10, 6.11, 6.13, 6.14, 26.1_
     - _Design: Correctness Properties (Properties 6, 7, 8, 9)_
 
-- [ ] 23. Implement the audience poll + word-cloud participation UI (Req 5, 6)
-  - [ ] 23.1 Implement the `PollCard` audience component
+- [x] 23. Implement the audience poll + word-cloud participation UI (Req 5, 6)
+  - [x] 23.1 Implement the `PollCard` audience component
     - Build a single-choice poll component that lists the open poll's options, calls the
       respond RPC (task 21.3), reflects the participant's current selection, and lets the
       participant change their choice (upsert-replace); show the four UX states; never render
@@ -876,7 +876,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.7, 5.9, 5.10, 8.6, 24.7, 2.8_
     - _Design: Components (`PollCard`); Request/data flows (Poll lifecycle)_
 
-  - [ ] 23.2 Implement visibility-aware poll results rendering with realtime updates
+  - [x] 23.2 Implement visibility-aware poll results rendering with realtime updates
     - Render poll results (Recharts, ARIA-labelled, non-colour encodings) subscribing to the
       event-scoped poll-results channel (task 21.4) so visible results update within 2 s; for a
       `hide_until_closed` poll, withhold results from the audience (and presenter) until the poll
@@ -884,7 +884,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.11, 5.12, 23.2, 24.5_
     - _Design: Frontend Design (Realtime subscription strategy); Technology Stack (Recharts)_
 
-  - [ ] 23.3 Implement the `WordCloudCard` audience component with normalised live preview
+  - [x] 23.3 Implement the `WordCloudCard` audience component with normalised live preview
     - Build a word-cloud response input (1–50 chars) that calls the word-cloud respond RPC
       (task 22.3), shows the participant's current response and allows updates while the prompt
       is open, and previews the client-side `normalise` result (task 22.1); show the four UX
@@ -893,7 +893,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 6.6, 6.7, 6.8, 6.10, 24.7, 2.8_
     - _Design: Components (`WordCloudCard`); Request/data flows (Word cloud)_
 
-  - [ ] 23.4 Implement the audience word-cloud visualisation with monotonic sizing
+  - [x] 23.4 Implement the audience word-cloud visualisation with monotonic sizing
     - Render the aggregated live word cloud (d3-cloud + lightweight React wrapper) from the
       visible-aggregate channel (task 22.4), mapping each term's aggregated frequency to a
       non-decreasing rendered size (task 22.1), excluding hidden entries and stop words; update
@@ -903,14 +903,14 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Technology Stack (d3-cloud — monotonic sizing); Frontend Design (Realtime
       subscription strategy)_
 
-  - [ ] 23.5 Wire the poll + word-cloud views into the audience event route
+  - [x] 23.5 Wire the poll + word-cloud views into the audience event route
     - Extend `/e/:eventRef` to surface the current active interaction (open poll / open prompt)
       and route the participant to `PollCard` / `WordCloudCard`, reusing the M2
       `useRealtimeChannel` hook (event-scoped subscription only) and `ConnectionStatusIndicator`
     - _Requirements: 2.6, 5.12, 6.15, 23.2_
     - _Design: Frontend Design (Route map — `/e/:eventRef`); Request/data flows (Audience join)_
 
-  - [ ]* 23.6 Write unit tests for the poll + word-cloud audience UI
+  - [x]* 23.6 Write unit tests for the poll + word-cloud audience UI
     - Test poll single-choice selection and change-of-choice invoking the respond RPC with
       upsert semantics; results hidden for `hide_until_closed` until closed and shown for
       `show_always`; word-cloud input 1–50 validation retaining text on error; client normalise
@@ -919,8 +919,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.7, 5.11, 6.8, 6.10, 6.11, 8.6, 26.1_
     - _Design: Components (`PollCard`, `WordCloudCard`)_
 
-- [ ] 24. Implement the presenter poll_results + word_cloud display modes (Req 7)
-  - [ ] 24.1 Add the `poll_results` and `word_cloud` presenter modes to `PresenterView`
+- [x] 24. Implement the presenter poll_results + word_cloud display modes (Req 7)
+  - [x] 24.1 Add the `poll_results` and `word_cloud` presenter modes to `PresenterView`
     - Extend the existing `/present/:eventRef` view (M2 shipped join/featured_question/
       top_questions/waiting) with the `poll_results` mode (renders the active poll's
       visibility-aware results, projector-optimised) and the `word_cloud` mode (renders the
@@ -930,7 +930,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Request/data flows (Presenter mode switching); Data Models (`presenter_mode`
       enum values `poll_results`, `word_cloud`)_
 
-  - [ ] 24.2 Wire realtime updates and retain-last-content on interruption for the new modes
+  - [x] 24.2 Wire realtime updates and retain-last-content on interruption for the new modes
     - Subscribe the `poll_results` and `word_cloud` presenter modes to the event-scoped
       poll-results and word-cloud aggregate channels (tasks 21.4, 22.4) so content updates
       within 2 s; on connection loss retain the last successfully displayed content and show the
@@ -939,7 +939,7 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Design: Request/data flows (Presenter mode switching — retain last content); Frontend
       Design (Realtime subscription strategy & reconnect UX)_
 
-  - [ ]* 24.3 Write the presenter-visibility property + unit tests for polls/word-cloud (Property 10 remainder)
+  - [x]* 24.3 Write the presenter-visibility property + unit tests for polls/word-cloud (Property 10 remainder)
     - **Property 10: Moderation visibility invariant (presenter poll/word-cloud remainder)** —
       generate word-cloud entries with random `is_hidden` flags and polls with each
       `results_visibility`; compute the presenter-visible sets via the RLS-backed read path;
@@ -952,8 +952,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     - _Requirements: 5.11, 6.13, 7.7, 7.9, 26.1_
     - _Design: Correctness Properties (Property 10); RLS Design (`word_cloud_responses`, `polls`)_
 
-- [ ] 25. Milestone 3 checkpoint — verify Polls and Word Cloud completeness
-  - [ ] 25.1 Verify the Milestone 3 definition of done
+- [x] 25. Milestone 3 checkpoint — verify Polls and Word Cloud completeness
+  - [x] 25.1 Verify the Milestone 3 definition of done
     - Confirm the polls/poll_options/poll_responses/word_cloud_prompts/word_cloud_responses
       migrations + RLS build from a fresh database (static guard extended, task 19.5); confirm
       the single-open-poll and single-open-prompt partial unique indexes are enforced; confirm

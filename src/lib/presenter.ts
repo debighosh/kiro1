@@ -482,7 +482,6 @@ export function subscribeToPresenter(
   };
 }
 
-
 // ============================================================================
 // Task 24.1 — Presenter poll_results + word_cloud reads (Milestone 3).
 // ============================================================================
@@ -524,7 +523,8 @@ export type PresenterPollStatus = 'open' | 'closed';
  * enum). `hide_until_closed` withholds the tallies until the poll is `closed`;
  * `show_always` renders the per-option tallies while the poll is still open.
  */
-export type PresenterPollResultsVisibility = 'show_always' | 'hide_until_closed';
+export type PresenterPollResultsVisibility =
+  'show_always' | 'hide_until_closed';
 
 /**
  * A single poll option projected for the presenter results surface — the option
@@ -583,16 +583,21 @@ function isPresenterPollOption(value: unknown): value is PresenterPollOption {
  * poll — which RLS should already exclude — is rejected here too, belt-and-
  * braces for Req 5.11.
  */
-function isPresenterReadablePoll(
-  value: unknown,
-): value is { id: string; question_text: string; status: PresenterPollStatus; results_visibility: PresenterPollResultsVisibility } {
+function isPresenterReadablePoll(value: unknown): value is {
+  id: string;
+  question_text: string;
+  status: PresenterPollStatus;
+  results_visibility: PresenterPollResultsVisibility;
+} {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
     typeof v.id === 'string' &&
     typeof v.question_text === 'string' &&
     typeof v.status === 'string' &&
-    (PRESENTER_READABLE_POLL_STATUSES as readonly string[]).includes(v.status) &&
+    (PRESENTER_READABLE_POLL_STATUSES as readonly string[]).includes(
+      v.status,
+    ) &&
     (v.results_visibility === 'show_always' ||
       v.results_visibility === 'hide_until_closed')
   );
@@ -711,7 +716,9 @@ function isPresenterReadablePrompt(
     typeof v.id === 'string' &&
     typeof v.prompt_text === 'string' &&
     typeof v.status === 'string' &&
-    (PRESENTER_READABLE_PROMPT_STATUSES as readonly string[]).includes(v.status) &&
+    (PRESENTER_READABLE_PROMPT_STATUSES as readonly string[]).includes(
+      v.status,
+    ) &&
     typeof v.results_visible_while_collecting === 'boolean'
   );
 }
@@ -722,7 +729,9 @@ function isPresenterWordCloudResponse(
 ): value is PresenterWordCloudResponse {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return typeof v.normalised_text === 'string' && typeof v.is_hidden === 'boolean';
+  return (
+    typeof v.normalised_text === 'string' && typeof v.is_hidden === 'boolean'
+  );
 }
 
 /**
@@ -787,5 +796,8 @@ export async function readPresenterWordCloud(
     return { prompt, responses: [] };
   }
 
-  return { prompt, responses: responseRows.filter(isPresenterWordCloudResponse) };
+  return {
+    prompt,
+    responses: responseRows.filter(isPresenterWordCloudResponse),
+  };
 }

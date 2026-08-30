@@ -231,7 +231,9 @@ describe('PresenterView — Milestone-3 modes (poll_results / word_cloud)', () =
     ).toBeInTheDocument();
     const retained = screen.getAllByTestId('presenter-poll-option');
     expect(retained[0]).toHaveTextContent('42');
-    expect(screen.getByText(OPEN_SHOW_ALWAYS_POLL.question_text)).toBeInTheDocument();
+    expect(
+      screen.getByText(OPEN_SHOW_ALWAYS_POLL.question_text),
+    ).toBeInTheDocument();
   });
 
   it('word_cloud mode: renders terms, updates on a word_cloud broadcast, and RETAINS terms on connection loss (Req 6.13, 7.7, 7.9)', async () => {

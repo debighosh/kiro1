@@ -122,7 +122,10 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant (
         const terms = new Set(aggregateWordCloud(responses).map((t) => t.term));
         // Terms that have at least one hidden contributor but ZERO visible
         // contributors must be absent from the presenter cloud.
-        const hiddenOnlyTerms = new Map<string, { hidden: number; visible: number }>();
+        const hiddenOnlyTerms = new Map<
+          string,
+          { hidden: number; visible: number }
+        >();
         for (const r of responses) {
           const term = normalise(r.normalised_text);
           if (term.length === 0) continue;
@@ -149,7 +152,9 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant (
         const baseline = aggregateWordCloud(visibleBatch);
         const mixed = aggregateWordCloud([...visibleBatch, ...onlyHidden]);
 
-        const baselineFreq = new Map(baseline.map((t) => [t.term, t.frequency]));
+        const baselineFreq = new Map(
+          baseline.map((t) => [t.term, t.frequency]),
+        );
         const mixedFreq = new Map(mixed.map((t) => [t.term, t.frequency]));
 
         // Every baseline term keeps EXACTLY its frequency; no new term appears
@@ -221,12 +226,14 @@ describe('Feature: mss-livepulse, Property 10: Moderation visibility invariant (
 
   it('an OPEN hide_until_closed poll’s results are NEVER presenter-visible (withheld until closed)', () => {
     // Exhaustive over the (small) input space, and as a property.
-    expect(presenterPollResultsVisible('open', 'hide_until_closed')).toBe(false);
+    expect(presenterPollResultsVisible('open', 'hide_until_closed')).toBe(
+      false,
+    );
     fc.assert(
       fc.property(fc.constant('open' as const), () => {
-        expect(
-          presenterPollResultsVisible('open', 'hide_until_closed'),
-        ).toBe(false);
+        expect(presenterPollResultsVisible('open', 'hide_until_closed')).toBe(
+          false,
+        );
       }),
     );
   });
@@ -270,12 +277,16 @@ describe('presenter word-cloud visibility — unit examples (Req 6.13, 7.9)', ()
 
 describe('presenter poll results visibility — unit examples (Req 5.11)', () => {
   it('closed polls always reveal tallies regardless of results_visibility', () => {
-    expect(presenterPollResultsVisible('closed', 'hide_until_closed')).toBe(true);
+    expect(presenterPollResultsVisible('closed', 'hide_until_closed')).toBe(
+      true,
+    );
     expect(presenterPollResultsVisible('closed', 'show_always')).toBe(true);
   });
 
   it('open + show_always reveals tallies; open + hide_until_closed withholds them', () => {
     expect(presenterPollResultsVisible('open', 'show_always')).toBe(true);
-    expect(presenterPollResultsVisible('open', 'hide_until_closed')).toBe(false);
+    expect(presenterPollResultsVisible('open', 'hide_until_closed')).toBe(
+      false,
+    );
   });
 });

@@ -55,14 +55,7 @@
  * lifecycle).
  */
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  LabelList,
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, LabelList } from 'recharts';
 import {
   readActivePoll,
   submitPollResponse,
@@ -209,7 +202,11 @@ export function PollCard({
         setOptions((current) =>
           current.map((option) =>
             nextCounts.has(option.id)
-              ? { ...option, response_count: nextCounts.get(option.id) ?? option.response_count }
+              ? {
+                  ...option,
+                  response_count:
+                    nextCounts.get(option.id) ?? option.response_count,
+                }
               : option,
           ),
         );
@@ -372,7 +369,10 @@ export function PollCard({
             /* Controls withheld (Req 2.8, 5.9, 5.10): read-only notice. The
                options are still listed (non-interactive) so the audience can
                see what the poll asked. */
-            <div className="flex flex-col gap-2" data-testid="poll-controls-withheld">
+            <div
+              className="flex flex-col gap-2"
+              data-testid="poll-controls-withheld"
+            >
               <p role="status" className="text-ink-muted">
                 {!eventLive
                   ? 'This event is not currently live, so poll responses are closed.'
@@ -380,7 +380,10 @@ export function PollCard({
                     ? 'This poll is closed. Responses are no longer accepted.'
                     : 'This poll is not open for responses yet.'}
               </p>
-              <ul className="flex flex-col gap-2" data-testid="poll-options-readonly">
+              <ul
+                className="flex flex-col gap-2"
+                data-testid="poll-options-readonly"
+              >
                 {poll.options.map((option) => (
                   <li
                     key={option.id}
@@ -478,7 +481,13 @@ export function PollCard({
                 <BarChart
                   width={320}
                   height={200}
-                  data={resultsData as { optionId: string; label: string; count: number }[]}
+                  data={
+                    resultsData as {
+                      optionId: string;
+                      label: string;
+                      count: number;
+                    }[]
+                  }
                 >
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} />
                   <YAxis allowDecimals={false} width={28} />

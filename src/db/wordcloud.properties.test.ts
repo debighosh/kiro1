@@ -181,8 +181,7 @@ describe('Property 7: at most one open word-cloud prompt per event (Req 6.4, 6.5
               expect(err).toBeInstanceOf(WordCloudRuleError);
               const kind = (err as WordCloudRuleError).kind;
               expect(
-                kind === 'invalid_transition' ||
-                  kind === 'prompt_already_open',
+                kind === 'invalid_transition' || kind === 'prompt_already_open',
               ).toBe(true);
               // On rejection nothing changed: statuses identical to `before`.
               const after = promptIds.map((id) => model.getPrompt(id)?.status);

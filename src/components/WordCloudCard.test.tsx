@@ -91,10 +91,9 @@ const EVENT_ID = 'event-wc-123';
 const PARTICIPANT_SENTINEL = 'PARTICIPANT-SENTINEL-DO-NOT-RENDER-wc-xyz';
 
 /** Builds an active word-cloud prompt. Extra props simulate a leaky read. */
-function buildPrompt(overrides: Record<string, unknown> = {}): Record<
-  string,
-  unknown
-> {
+function buildPrompt(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 'prompt-1',
     event_id: EVENT_ID,
@@ -255,7 +254,9 @@ describe('WordCloudCard — no participant identifier reaches the DOM (Req 8.6)'
     );
 
     // The prompt text + terms render...
-    expect(await screen.findByText('Describe today in one word')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Describe today in one word'),
+    ).toBeInTheDocument();
     const visual = await screen.findByTestId('word-cloud-terms');
     expect(within(visual).getByText('apple')).toBeInTheDocument();
 

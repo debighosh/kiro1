@@ -715,9 +715,10 @@ describe.skipIf(!hasLiveSupabase)(
        * an error and/or affect no rows (a filtered UPDATE that matches nothing
        * yields an empty data set under RLS default-deny).
        */
-      function expectWriteRejected(
-        result: { data: unknown; error: unknown },
-      ): void {
+      function expectWriteRejected(result: {
+        data: unknown;
+        error: unknown;
+      }): void {
         const { data, error } = result;
         if (error === null) {
           // With RLS default-deny and no write policy, a returning write that

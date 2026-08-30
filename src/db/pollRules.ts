@@ -73,13 +73,15 @@ export const ALL_POLL_STATUSES: readonly PollStatus[] = [
  * moves AND for the idempotent same-status no-op; false for every other move.
  * This is the exact predicate the SQL encodes before applying the UPDATE.
  */
-export function isValidPollTransition(from: PollStatus, to: PollStatus): boolean {
+export function isValidPollTransition(
+  from: PollStatus,
+  to: PollStatus,
+): boolean {
   if (from === to) {
     return true; // idempotent same-status set is allowed (no-op)
   }
   return (
-    (from === 'draft' && to === 'open') ||
-    (from === 'open' && to === 'closed')
+    (from === 'draft' && to === 'open') || (from === 'open' && to === 'closed')
   );
 }
 
@@ -108,9 +110,7 @@ export function acceptsPollResponse(status: PollStatus): boolean {
 
 /** set_poll_status error signals (20260101000025). */
 export type PollTransitionError =
-  | 'poll_not_found'
-  | 'invalid_transition'
-  | 'poll_already_open';
+  'poll_not_found' | 'invalid_transition' | 'poll_already_open';
 
 /** submit_poll_response error signals (20260101000027). */
 export type PollResponseError =

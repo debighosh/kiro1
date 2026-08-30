@@ -277,7 +277,5 @@ export function aggregateWordCloud(
       frequency,
       size: sizeForFrequency(frequency, minFreq, maxFreq, minSize, maxSize),
     }))
-    .sort((a, b) =>
-      b.frequency - a.frequency || a.term.localeCompare(b.term),
-    );
+    .sort((a, b) => b.frequency - a.frequency || a.term.localeCompare(b.term));
 }

@@ -39,15 +39,12 @@ import userEvent from '@testing-library/user-event';
 // read/write/subscribe helpers are stubbed with spies. The factory is hoisted,
 // so the spies are exposed via `vi.hoisted` and must not reference outer
 // variables.
-const {
-  readActivePoll,
-  submitPollResponse,
-  subscribeToPollResults,
-} = vi.hoisted(() => ({
-  readActivePoll: vi.fn(),
-  submitPollResponse: vi.fn(),
-  subscribeToPollResults: vi.fn(),
-}));
+const { readActivePoll, submitPollResponse, subscribeToPollResults } =
+  vi.hoisted(() => ({
+    readActivePoll: vi.fn(),
+    submitPollResponse: vi.fn(),
+    subscribeToPollResults: vi.fn(),
+  }));
 
 vi.mock('../lib/polls', () => {
   class PollError extends Error {
@@ -84,10 +81,9 @@ const EVENT_ID = 'event-poll-123';
 const PARTICIPANT_SENTINEL = 'PARTICIPANT-SENTINEL-DO-NOT-RENDER-poll-xyz';
 
 /** Builds a poll with two options. Extra props simulate a leaky over-broad read. */
-function buildPoll(overrides: Record<string, unknown> = {}): Record<
-  string,
-  unknown
-> {
+function buildPoll(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 'poll-1',
     event_id: EVENT_ID,
@@ -151,9 +147,7 @@ describe('PollCard — single-choice selection & change-of-choice (Req 5.7)', ()
 
     // Select the first option → submit called once with (pollId, optionId).
     await user.click(darkMode);
-    await waitFor(() =>
-      expect(submitPollResponse).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(submitPollResponse).toHaveBeenCalledTimes(1));
     expect(submitPollResponse).toHaveBeenNthCalledWith(1, 'poll-1', 'opt-a');
 
     // aria-checked reflects the selection.
@@ -168,9 +162,7 @@ describe('PollCard — single-choice selection & change-of-choice (Req 5.7)', ()
     await user.click(
       within(screen.getByTestId('poll-options')).getAllByRole('radio')[1],
     );
-    await waitFor(() =>
-      expect(submitPollResponse).toHaveBeenCalledTimes(2),
-    );
+    await waitFor(() => expect(submitPollResponse).toHaveBeenCalledTimes(2));
     expect(submitPollResponse).toHaveBeenNthCalledWith(2, 'poll-1', 'opt-b');
 
     // The selection moved to the second option (single-choice — one active).

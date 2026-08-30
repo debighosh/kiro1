@@ -76,7 +76,10 @@ import {
   normalise,
   type WordCloudTerm,
 } from '../lib/wordcloud';
-import { isParticipationEligible, type EventStatus } from '../lib/participationGate';
+import {
+  isParticipationEligible,
+  type EventStatus,
+} from '../lib/participationGate';
 import {
   readActivePrompt,
   readVisibleResponses,
@@ -498,7 +501,10 @@ export function WordCloudCard({
           {normalisedPreview ? (
             <p id={previewId} className="text-sm text-ink-muted">
               will be counted as:{' '}
-              <span className="font-medium text-ink" data-testid="word-cloud-normalised-preview">
+              <span
+                className="font-medium text-ink"
+                data-testid="word-cloud-normalised-preview"
+              >
                 {normalisedPreview}
               </span>
             </p>
@@ -520,8 +526,8 @@ export function WordCloudCard({
             aria-live="polite"
             className="text-ink"
           >
-            Your response was recorded. You can update it while the word cloud is
-            open.
+            Your response was recorded. You can update it while the word cloud
+            is open.
           </p>
         ) : null}
 

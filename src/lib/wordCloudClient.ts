@@ -334,7 +334,6 @@ export async function submitWordCloudResponse(
   }
 }
 
-
 // ============================================================================
 // Word-cloud VISIBLE-AGGREGATE read + event-scoped Realtime subscription
 // (Task 23.4 — audience word-cloud visualisation, additive to task 23.3).

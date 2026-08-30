@@ -121,7 +121,10 @@ export class PollError extends Error {
   readonly kind: PollErrorKind;
   readonly cause?: unknown;
 
-  constructor(message: string, options: { kind: PollErrorKind; cause?: unknown }) {
+  constructor(
+    message: string,
+    options: { kind: PollErrorKind; cause?: unknown },
+  ) {
     super(message);
     this.name = 'PollError';
     this.kind = options.kind;
@@ -138,7 +141,10 @@ const POLL_OPTION_COLUMNS =
   'id, poll_id, text, display_order, response_count' as const;
 
 /** The poll statuses anon may ever read (RLS returns only these on a live event). */
-const READABLE_POLL_STATUSES: readonly PollStatus[] = ['open', 'closed'] as const;
+const READABLE_POLL_STATUSES: readonly PollStatus[] = [
+  'open',
+  'closed',
+] as const;
 
 /** Type guard narrowing an untyped Supabase row to {@link PollOption}. */
 function isPollOption(value: unknown): value is PollOption {
@@ -274,10 +280,13 @@ function toPollError(error: { message?: string } | null): PollError {
     });
   }
   if (raw.includes('poll_closed')) {
-    return new PollError('This poll is closed. Responses are no longer accepted.', {
-      kind: 'poll_closed',
-      cause: error,
-    });
+    return new PollError(
+      'This poll is closed. Responses are no longer accepted.',
+      {
+        kind: 'poll_closed',
+        cause: error,
+      },
+    );
   }
   if (raw.includes('poll_not_found')) {
     return new PollError('That poll could not be found.', {
@@ -286,10 +295,13 @@ function toPollError(error: { message?: string } | null): PollError {
     });
   }
   if (raw.includes('event_not_live')) {
-    return new PollError('Responses are closed. This event is not currently live.', {
-      kind: 'event_not_live',
-      cause: error,
-    });
+    return new PollError(
+      'Responses are closed. This event is not currently live.',
+      {
+        kind: 'event_not_live',
+        cause: error,
+      },
+    );
   }
   if (raw.includes('invalid_option')) {
     return new PollError('That answer is not a valid option for this poll.', {
@@ -337,7 +349,6 @@ export async function submitPollResponse(
     throw toPollError(error);
   }
 }
-
 
 // ============================================================================
 // Event-scoped realtime subscription for the audience poll RESULTS surface

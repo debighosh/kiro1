@@ -520,7 +520,6 @@ describe('Milestone 2 schema / migrations (Q&A tables)', () => {
   });
 });
 
-
 /**
  * Task 19.5 — Milestone 3 (Polls & Word Cloud) schema / migration verification.
  *
@@ -859,7 +858,9 @@ describe('Milestone 3 schema / migrations (Polls & Word Cloud tables)', () => {
     });
 
     it('requires normalised_text to be NOT NULL', () => {
-      expect(flat[WORD_CLOUD_FILE]).toMatch(/normalised_text\s+text\s+NOT NULL/i);
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /normalised_text\s+text\s+NOT NULL/i,
+      );
     });
 
     it('enforces one response per participant per prompt via UNIQUE (participant_identifier, prompt_id)', () => {
@@ -912,9 +913,7 @@ describe('Milestone 3 schema / migrations (Polls & Word Cloud tables)', () => {
 
     it('excludes draft polls from the anon SELECT predicate (status IN open/closed)', () => {
       // The security-critical guarantee: draft polls never reach the audience.
-      expect(flat[POLLS_RLS_FILE]).toMatch(
-        /status IN \('open', 'closed'\)/i,
-      );
+      expect(flat[POLLS_RLS_FILE]).toMatch(/status IN \('open', 'closed'\)/i);
     });
 
     it('excludes draft prompts from the anon word_cloud_prompts predicate', () => {

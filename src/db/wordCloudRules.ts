@@ -78,16 +78,11 @@ export const MAX_RESPONSE_LENGTH = 50 as const;
 
 /** Signals raised by the prompt-lifecycle RPC (set_word_cloud_prompt_status). */
 export type PromptLifecycleError =
-  | 'prompt_not_found'
-  | 'invalid_transition'
-  | 'prompt_already_open';
+  'prompt_not_found' | 'invalid_transition' | 'prompt_already_open';
 
 /** Signals raised by the response-upsert RPC (submit_word_cloud_response). */
 export type ResponseError =
-  | 'prompt_not_found'
-  | 'prompt_not_open'
-  | 'event_not_live'
-  | 'invalid_length';
+  'prompt_not_found' | 'prompt_not_open' | 'event_not_live' | 'invalid_length';
 
 /** The union of every signal this model may raise. */
 export type WordCloudErrorKind = PromptLifecycleError | ResponseError;
