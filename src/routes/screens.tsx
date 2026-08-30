@@ -1,4 +1,10 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useState,
+  type FormEvent,
+} from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AdminAuthError,
@@ -8,7 +14,17 @@ import {
 import { findEventByRef, type PublicEvent } from '../lib/eventLookup';
 import { isParticipationEligible } from '../lib/participationGate';
 import { getParticipantIdentifier } from '../lib/participant';
+import {
+  isPresenterMode,
+  readFeaturedQuestion,
+  readPresenterQuestions,
+  subscribeToPresenter,
+  type PresenterMode,
+  type PresenterQuestion,
+} from '../lib/presenter';
 import { EventJoinCard } from '../components/EventJoinCard';
+import { QrDisplay } from '../components/QrDisplay';
+import { QuestionSubmissionForm } from '../components/QuestionSubmissionForm';
 
 /**
  * Minimal placeholder screens for the Milestone 1 routing skeleton (task 1.3).
@@ -332,10 +348,14 @@ export function EventView(): JSX.Element {
               <p className="mt-1 text-ink-muted">
                 Ask a question or vote on questions from others.
               </p>
-              {/* MOUNT POINT (tasks 15.x): QuestionSubmissionForm +
-                  QuestionListAndVoting are wired in here. Left intentionally
-                  minimal to avoid over-building the Q&A internals in 14.4. */}
-              <div data-testid="qa-mount-point" />
+              {/* MOUNT POINT (tasks 15.x): the audience Q&A widgets are wired
+                  in here. Task 15.1 mounts `QuestionSubmissionForm` so a live
+                  event shows the submission form; `QuestionListAndVoting`
+                  (task 15.2) is added alongside it later. Only rendered for a
+                  live/eligible event, preserving participation gating. */}
+              <div data-testid="qa-mount-point" className="mt-4">
+                <QuestionSubmissionForm eventId={event.id} />
+              </div>
             </div>
           ) : (
             /* Poll / word-cloud sections are "coming up" placeholders for M2. */
@@ -579,12 +599,302 @@ export function AdminDashboard(): JSX.Element {
   return <h1 className="text-2xl font-semibold text-ink">Admin Dashboard</h1>;
 }
 
+/**
+ * Builds the absolute audience URL a participant scans/opens to join the event
+ * (Req 7.10). The presenter join screen encodes this URL in the QR code and
+ * shows the Event_Code (slug) alongside it; both resolve to `/e/:eventRef`
+ * (task 14.4). We prefer the slug (the human-enterable Event_Code) and fall
+ * back to the event id when no slug is set.
+ *
+ * `window.location.origin` is used so the URL is correct in whichever
+ * environment the presenter is opened; when unavailable (non-browser test
+ * contexts) we fall back to a relative path, which the QR still encodes fine.
+ */
+function buildAudienceUrl(event: PublicEvent): string {
+  const ref = event.slug ?? event.id;
+  const path = `/e/${encodeURIComponent(ref)}`;
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : '';
+  return `${origin}${path}`;
+}
+
+/** Resolution state of the presenter event lookup (Req 24.7). */
+type PresenterStatus = 'loading' | 'ready' | 'unavailable';
+
+/**
+ * `/present/:eventRef` — display-only, projector-optimised presenter view
+ * (task 17.1). The {@link Presenter} layout already provides the 16:9,
+ * high-contrast, ≥24px shell (Req 7.1); this component fills it with the
+ * content permitted by the event's currently-selected presenter mode.
+ *
+ * Access (Req 7.2, 7.3): a presenter token MAY be supplied as `?t=<token>`; for
+ * Milestone 2 the presenter reads only content an anonymous visitor can already
+ * see for a LIVE event (RLS-gated), so the token is accepted as a route param
+ * but full token verification is intentionally minimal here — the read path is
+ * itself the authoritative guard (nothing non-public is reachable). A
+ * non-live/unknown event resolves to `null` (RLS) and lands on the
+ * unavailable/waiting state.
+ *
+ * Modes implemented for M2 (Req 7.4 subset):
+ *  - `join`: the join screen — QR code (of the audience URL) + the Event_Code
+ *    (slug) + the event name (Req 7.10).
+ *  - `featured_question`: the highest-priority `featured` question (most votes).
+ *  - `top_questions`: the top presentable questions ordered by votes desc.
+ *  - `waiting` / any M3+ mode (`poll_results`/`word_cloud`/`ai_themes`): a
+ *    waiting-screen fallback.
+ *
+ * Visibility (Req 7.9): `pending`/`hidden` questions are excluded from EVERY
+ * mode — the read helpers filter to presentable statuses and RLS excludes the
+ * rest, so they are never queried nor rendered.
+ *
+ * Realtime (Req 7.6, 7.7): a Supabase Realtime channel subscribes to `events`
+ * (for `active_presenter_mode` changes) and `questions` (for new/updated
+ * questions and vote-count changes) scoped to this `event_id`, so the view
+ * updates without a manual refresh. On connection loss the LAST successfully
+ * displayed content is retained and an interruption indicator is shown
+ * (Req 7.7); it clears when the connection recovers.
+ *
+ * Requirements traceability: 7.9, 7.6, 7.7, 7.5, 7.10.
+ * Design: Request/data flows (Presenter mode switching); Frontend Design
+ * (Route map — `/present/:eventRef`).
+ */
 export function PresenterView(): JSX.Element {
   const { eventRef } = useParams();
+
+  const [status, setStatus] = useState<PresenterStatus>('loading');
+  const [event, setEvent] = useState<PublicEvent | null>(null);
+  const [mode, setMode] = useState<PresenterMode>('waiting');
+  const [questions, setQuestions] = useState<PresenterQuestion[]>([]);
+  const [featured, setFeatured] = useState<PresenterQuestion | null>(null);
+  // Live-connection interruption indicator (Req 7.7). When true the last-good
+  // content above is retained and an interruption banner is shown.
+  const [interrupted, setInterrupted] = useState(false);
+
+  // Resolve the event and its active presenter mode. Anonymous readers only
+  // see LIVE events (RLS), so an unknown/non-live ref surfaces as unavailable.
+  useEffect(() => {
+    let active = true;
+    setStatus('loading');
+    setEvent(null);
+
+    void (async () => {
+      const resolved = await findEventByRef(eventRef);
+      if (!active) return;
+      if (resolved) {
+        setEvent(resolved);
+        setMode(
+          isPresenterMode(resolved.active_presenter_mode)
+            ? resolved.active_presenter_mode
+            : 'waiting',
+        );
+        setStatus('ready');
+      } else {
+        setStatus('unavailable');
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [eventRef]);
+
+  const eventId = event?.id ?? null;
+
+  // Load (and reload) the questions this mode needs. Kept as a stable callback
+  // so both the initial load and the realtime handler can reuse it. On a read
+  // failure the helpers return empty; we RETAIN the previous content (Req 7.7)
+  // by only replacing state when the read succeeds with data OR the mode does
+  // not need questions.
+  const refreshContent = useCallback(
+    async (currentMode: PresenterMode, id: string): Promise<void> => {
+      if (currentMode === 'featured_question') {
+        const top = await readFeaturedQuestion(id);
+        setFeatured((prev) => top ?? prev);
+      } else if (currentMode === 'top_questions') {
+        const list = await readPresenterQuestions(id);
+        setQuestions((prev) => (list.length > 0 ? list : prev));
+      }
+    },
+    [],
+  );
+
+  // Initial content load whenever the resolved event or mode changes.
+  useEffect(() => {
+    if (status !== 'ready' || !eventId) return;
+    let active = true;
+    void (async () => {
+      // A fresh mode selection clears stale content of the OTHER mode so we do
+      // not show, e.g., an old featured question under top_questions.
+      if (mode === 'featured_question') {
+        const top = await readFeaturedQuestion(eventId);
+        if (active) setFeatured(top);
+      } else if (mode === 'top_questions') {
+        const list = await readPresenterQuestions(eventId);
+        if (active) setQuestions(list);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [status, eventId, mode]);
+
+  // Realtime subscription (Req 7.6, 7.7): reflect mode changes + question/vote
+  // updates within ~2 s without a manual refresh, scoped to THIS event only.
+  // The channel wiring lives in `subscribeToPresenter` (in `../lib/presenter`)
+  // so this view has no direct Supabase dependency.
+  useEffect(() => {
+    if (status !== 'ready' || !eventId) return;
+
+    const unsubscribe = subscribeToPresenter(eventId, {
+      // The moderator changing the active presenter mode (Req 7.5, 7.6).
+      onModeChange: (next) => setMode(next),
+      // New/updated questions and vote-count changes (Req 7.6): re-read the
+      // current mode's content.
+      onQuestionsChange: () => {
+        void refreshContent(mode, eventId);
+      },
+      // Retain last content + flag/clear the interruption indicator (Req 7.7).
+      onConnectionChange: (isInterrupted) => setInterrupted(isInterrupted),
+    });
+
+    return unsubscribe;
+  }, [status, eventId, mode, refreshContent]);
+
+  // Loading state (Req 24.7).
+  if (status === 'loading') {
+    return (
+      <div
+        className="flex w-full flex-col items-center gap-6 text-center"
+        data-testid="presenter-loading"
+      >
+        <p role="status" aria-live="polite" className="text-3xl">
+          Loading the presenter view…
+        </p>
+      </div>
+    );
+  }
+
+  // Unavailable/waiting fallback for an unresolved or not-live event (Req 7.7
+  // waiting screen; anonymous/token read only sees live events).
+  if (status === 'unavailable' || event === null) {
+    return (
+      <div
+        className="flex w-full flex-col items-center gap-6 text-center"
+        data-testid="presenter-waiting"
+      >
+        <h1 className="text-5xl font-bold">Please wait</h1>
+        <p className="text-3xl text-white/80">
+          The presentation will begin shortly.
+        </p>
+      </div>
+    );
+  }
+
+  const audienceUrl = buildAudienceUrl(event);
+
+  // The interruption banner is rendered above every ready-state mode so the
+  // last-good content is always retained beneath it (Req 7.7).
+  const interruptionBanner = interrupted ? (
+    <p
+      role="status"
+      aria-live="polite"
+      data-testid="presenter-interruption"
+      className="rounded bg-yellow-400 px-4 py-2 text-2xl font-semibold text-black"
+    >
+      Live connection interrupted — showing the last update.
+    </p>
+  ) : null;
+
   return (
-    <h1 className="font-semibold">
-      Presenter{eventRef ? `: ${eventRef}` : ''}
-    </h1>
+    <div className="flex w-full flex-col items-center gap-8 text-center">
+      {interruptionBanner}
+
+      {mode === 'join' ? (
+        <section
+          data-testid="presenter-join"
+          className="flex flex-col items-center gap-6"
+        >
+          <h1 className="text-5xl font-bold">{event.name}</h1>
+          <QrDisplay
+            value={audienceUrl}
+            title={`QR code to join ${event.name}`}
+            size={360}
+            errorCorrectionLevel="M"
+            className="bg-white p-4"
+          />
+          <p className="text-3xl">
+            Join at your device with code{' '}
+            <span data-testid="presenter-event-code" className="font-mono font-bold">
+              {event.slug ?? event.id}
+            </span>
+          </p>
+        </section>
+      ) : mode === 'featured_question' ? (
+        <section
+          data-testid="presenter-featured"
+          className="flex w-full flex-col items-center gap-6"
+        >
+          <h2 className="text-3xl font-semibold text-white/80">
+            Featured question
+          </h2>
+          {featured ? (
+            <blockquote
+              data-testid="presenter-featured-question"
+              className="max-w-5xl text-5xl font-bold leading-tight"
+            >
+              {featured.text}
+            </blockquote>
+          ) : (
+            <p className="text-3xl text-white/80">
+              No featured question yet.
+            </p>
+          )}
+        </section>
+      ) : mode === 'top_questions' ? (
+        <section
+          data-testid="presenter-top"
+          className="flex w-full flex-col items-center gap-6"
+        >
+          <h2 className="text-3xl font-semibold text-white/80">Top questions</h2>
+          {questions.length > 0 ? (
+            <ol className="flex w-full max-w-5xl flex-col gap-4 text-left">
+              {questions.map((q) => (
+                <li
+                  key={q.id}
+                  data-testid="presenter-top-question"
+                  className="flex items-start justify-between gap-6 rounded border border-white/20 px-6 py-4"
+                >
+                  <span className="text-4xl font-semibold leading-tight">
+                    {q.text}
+                  </span>
+                  <span
+                    aria-label={`${q.vote_count} votes`}
+                    className="shrink-0 text-4xl font-bold tabular-nums"
+                  >
+                    ▲ {q.vote_count}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-3xl text-white/80">No questions yet.</p>
+          )}
+        </section>
+      ) : (
+        /* waiting / poll_results / word_cloud / ai_themes (M3+) fallback. */
+        <section
+          data-testid="presenter-waiting-mode"
+          className="flex flex-col items-center gap-6"
+        >
+          <h1 className="text-5xl font-bold">{event.name}</h1>
+          <p className="text-3xl text-white/80">
+            The presentation will continue shortly.
+          </p>
+        </section>
+      )}
+    </div>
   );
 }
 

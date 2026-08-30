@@ -28,6 +28,7 @@
 
 import { supabase } from './supabaseClient';
 import type { EventStatus } from './eventStatus';
+import type { PresenterMode } from './presenter';
 
 /**
  * The minimal, public projection of an event returned to anonymous
@@ -40,10 +41,28 @@ export interface PublicEvent {
   /** The human-enterable Event_Code; may be null if the event has no slug. */
   readonly slug: string | null;
   readonly status: EventStatus;
+  /**
+   * The event's currently-selected presenter display mode (Req 7.4, 7.5).
+   *
+   * This is a NON-SENSITIVE field the moderator sets and the presenter view
+   * reflects. It is optional here so existing callers (the landing/join/event
+   * screens) that predate task 17.1 continue to work unchanged — they simply
+   * ignore it. The presenter view (task 17.1) reads it to decide which mode to
+   * render. When the column is absent from a row (older projection) it is left
+   * `undefined` and the presenter falls back to the waiting screen.
+   */
+  readonly active_presenter_mode?: PresenterMode;
 }
 
-/** The columns the anon client requests — kept in one place and minimal. */
-const PUBLIC_EVENT_COLUMNS = 'id, name, slug, status' as const;
+/**
+ * The columns the anon client requests — kept in one place and minimal.
+ *
+ * `active_presenter_mode` is additive (task 17.1): it is non-sensitive and the
+ * anon RLS policy already only returns live events, so selecting it here is
+ * safe and lets the presenter view resolve the mode in the same round-trip.
+ */
+const PUBLIC_EVENT_COLUMNS =
+  'id, name, slug, status, active_presenter_mode' as const;
 
 /**
  * Type guard narrowing an untyped Supabase row to {@link PublicEvent}. Guards
@@ -57,7 +76,12 @@ function isPublicEvent(value: unknown): value is PublicEvent {
     typeof v.id === 'string' &&
     typeof v.name === 'string' &&
     (v.slug === null || typeof v.slug === 'string') &&
-    typeof v.status === 'string'
+    typeof v.status === 'string' &&
+    // active_presenter_mode is additive/optional: accept when absent, null, or
+    // a string (its precise membership is validated by the presenter helper).
+    (v.active_presenter_mode === undefined ||
+      v.active_presenter_mode === null ||
+      typeof v.active_presenter_mode === 'string')
   );
 }
 

@@ -53,6 +53,60 @@ vi.mock('../lib/participant', () => ({
   getParticipantIdentifier: () => getParticipantIdentifier(),
 }));
 
+// `EventView` now mounts `QuestionSubmissionForm` into the Q&A section for a
+// live event (task 15.1). That component imports `../lib/questions`, which
+// transitively loads `../lib/supabaseClient` (throws unless VITE_SUPABASE_* is
+// set). Stub the submit helper so importing the screen never touches env/network;
+// the form's own behaviour is covered by QuestionSubmissionForm.test.tsx.
+vi.mock('../lib/questions', () => ({
+  submitQuestion: vi.fn(),
+  QuestionError: class QuestionError extends Error {},
+  QUESTION_TEXT_MAX: 300,
+  QUESTION_LENGTH_MESSAGE:
+    'Your question must be between 1 and 300 characters.',
+  countQuestionCodePoints: (v: string) => [...v].length,
+}));
+
+// `./screens` also imports `../lib/presenter` (for the `PresenterView` screen,
+// task 17.1), which transitively loads `../lib/supabaseClient` (throws unless
+// VITE_SUPABASE_* is set). Stub the presenter reads so importing the screen
+// never touches env/network; `PresenterView` behaviour is covered by
+// PresenterView.test.tsx. `isPresenterMode` is preserved as a real guard.
+vi.mock('../lib/presenter', () => ({
+  readPresenterQuestions: vi.fn().mockResolvedValue([]),
+  readFeaturedQuestion: vi.fn().mockResolvedValue(null),
+  subscribeToPresenter: () => () => {},
+  isPresenterMode: (v: unknown) =>
+    typeof v === 'string' &&
+    [
+      'join',
+      'featured_question',
+      'top_questions',
+      'poll_results',
+      'word_cloud',
+      'ai_themes',
+      'waiting',
+    ].includes(v),
+}));
+
+// `./screens` also imports the shared browser Supabase client directly (for the
+// `PresenterView` realtime subscription, task 17.1). Constructing the real
+// client throws unless VITE_SUPABASE_* is set, so stub it with the minimal
+// surface `./screens` touches (a chainable Realtime channel). No network/env.
+vi.mock('../lib/supabaseClient', () => {
+  const channel = {
+    on: vi.fn().mockReturnThis(),
+    subscribe: vi.fn().mockReturnThis(),
+    unsubscribe: vi.fn(),
+  };
+  return {
+    supabase: {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    },
+  };
+});
+
 import { EventView } from './screens';
 
 const LIVE_EVENT = {

@@ -123,5 +123,13 @@ verify_jwt = false
 [functions.transition-event-status]
 verify_jwt = false
 
+# moderate-question (task 16.1): authenticated question-moderation mutation
+# (approve → approved, feature → featured, answer → answered, hide → hidden).
+# Like create-event and transition-event-status it performs its own admin-JWT
+# verification, so the platform's built-in JWT gate is disabled
+# (verify_jwt = false) to allow the function to return its own structured 401.
+[functions.moderate-question]
+verify_jwt = false
+
 [analytics]
 enabled = false
