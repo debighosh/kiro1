@@ -1,0 +1,133 @@
+/**
+ * Global stylesheet — MSS LivePulse design foundation.
+ *
+ * Tailwind layers (base / components / utilities) plus the minimal, real
+ * mobile-first + accessibility tokens that later screens build on.
+ *
+ * Requirements traceability:
+ * - 24.1 mobile-first: sensible base sizing, `.app-container` reflows 320–768px
+ *   with no horizontal scroll.
+ * - 24.3 visible focus indicators with ≥3:1 contrast (`:focus-visible` ring).
+ * - 24.6 respect `prefers-reduced-motion`: reduce non-essential motion.
+ * - 24.9 base foreground/background colours chosen for AA contrast.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base mobile-first typographic + colour tokens (kept minimal but real). */
+    --app-font-size-base: 1rem; /* 16px — comfortable phone reading size. */
+    --app-line-height-base: 1.5;
+    --app-color-bg: theme('colors.surface.DEFAULT');
+    --app-color-fg: theme('colors.ink.DEFAULT');
+    /* Focus ring token — held to ≥3:1 against light surfaces (Req 24.3). */
+    --app-focus-ring: theme('colors.focus');
+    --app-focus-ring-width: 3px;
+    --app-focus-ring-offset: 2px;
+  }
+
+  html {
+    /* Prevent iOS text auto-inflation and keep sizing predictable. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
+    font-size: var(--app-font-size-base);
+    line-height: var(--app-line-height-base);
+    color: var(--app-color-fg);
+    background-color: var(--app-color-bg);
+    /* Smooth font rendering on high-DPI phones. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Honour device safe areas for one-handed reach (Req 24.1). */
+    min-height: 100dvh;
+  }
+
+  /*
+   * Visible focus indicator for keyboard users (Req 24.3, 24.5).
+   * Uses :focus-visible so the ring appears for keyboard/AT navigation but not
+   * on mouse clicks. The colour + width intend a ≥3:1 contrast ring.
+   */
+  :focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  /* Do not strip focus styling for browsers that support :focus-visible. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@layer components {
+  /*
+   * Mobile-first content container (Req 24.1).
+   * Fluid to a comfortable reading measure (max 48rem / 768px), centred, with
+   * gutters that respect the device safe-area so content reflows without
+   * horizontal scroll from 320px upward.
+   */
+  .app-container {
+    width: 100%;
+    max-width: theme('maxWidth.container');
+    margin-inline: auto;
+    padding-inline: max(1rem, env(safe-area-inset-left));
+    padding-inline-end: max(1rem, env(safe-area-inset-right));
+  }
+
+  /*
+   * Accessible touch target helper (Req 24.2): guarantees ≥44×44 CSS px.
+   * Apply to buttons/links that must be comfortably tappable one-handed.
+   */
+  .touch-target {
+    min-width: theme('minWidth.touch');
+    min-height: theme('minHeight.touch');
+  }
+}
+
+@layer utilities {
+  /*
+   * Visually hide content while keeping it available to assistive technology
+   * (e.g. skip links, chart descriptions) — supports non-empty accessible
+   * names (Req 24.5).
+   */
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/*
+ * Reduced-motion support (Req 24.6): when the user requests reduced motion,
+ * disable non-essential animation/transition. Essential state changes are kept
+ * near-instant (≤100ms) rather than animated.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,32 @@
+-- ============================================================================
+-- Migration: 20260101000005_events_indexes.sql
+-- Purpose:   Add the remaining secondary index on the `events` table required
+--            by Milestone 1 — the `idx_events_status` index on `events(status)`
+--            for efficient status-scoped lookups (Req 23.3).
+--
+-- This migration MUST sort AFTER 20260101000002_events.sql (which creates the
+-- `events` table) and therefore runs after the foundation table already exists.
+--
+-- Scope (Task 4.3 only):
+--   * Create the `idx_events_status` secondary index on `events(status)`.
+--
+-- Already established elsewhere — DELIBERATELY NOT re-declared here:
+--   * PRIMARY KEY on `events(id)`                     — 20260101000002_events.sql
+--   * UNIQUE constraint on `events(slug)`             — 20260101000002_events.sql
+--   * UNIQUE constraint on `events(presenter_token)`  — 20260101000002_events.sql
+--   Re-creating any of the above would raise a duplicate-object error, so this
+--   migration adds ONLY the `idx_events_status` index. The design's `events`
+--   index list is exactly {PK id, UNIQUE slug, UNIQUE presenter_token,
+--   idx_events_status}; the first three are already in place.
+--
+-- Requirements: 1.3, 1.4, 7.3 (uniqueness — established earlier, referenced),
+--               23.3 (status index for performance).
+-- Design ref:  Data Models → `events` (Indexes: PK on id; UNIQUE on slug;
+--              UNIQUE on presenter_token; idx_events_status on status).
+--
+-- Idempotency: guarded with IF NOT EXISTS so the migration is safe to re-run.
+-- ============================================================================
+
+-- Secondary index supporting status-filtered queries on events, e.g. listing
+-- live events and status-gated read paths (Req 23.3).
+CREATE INDEX IF NOT EXISTS idx_events_status ON events (status);

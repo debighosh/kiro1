@@ -1,0 +1,5 @@
+# This file keeps the otherwise-empty `supabase/functions/` directory tracked
+# by git. Supabase Edge Functions (privileged admin mutations, rate-limited
+# anonymous submit/vote, and the AI Gateway) are implemented in tasks 7.2/7.3.
+# See design.md → Architecture (Edge Functions). No function code is added as
+# part of task 3.1.

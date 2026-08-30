@@ -1,0 +1,668 @@
+{
+  "pbtResults": {
+    "7.5 Write a property-based test for event-status gating groundwork (Property 11)": {
+      "status": "passed",
+      "lastRunTimestamp": 1788099367239
+    }
+  },
+  "executionHistory": {
+    "1.1 Initialise the Vite React + TypeScript SPA and base project structure": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649911
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096657431
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096762492
+      }
+    ],
+    "1.2 Add Tailwind CSS and base mobile-first design tokens": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649915
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096769436
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096909205
+      }
+    ],
+    "1.3 Add React Router and define the top-level route skeleton with role layouts": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649918
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096911739
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097020895
+      }
+    ],
+    "1.4 Configure ESLint + Prettier": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649921
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097023341
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097160240
+      }
+    ],
+    "1.5 Configure Vitest and fast-check": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649924
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097162731
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097285924
+      }
+    ],
+    "2.1 Create typed environment configuration and `.env.example` (names only)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649928
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097290628
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097406190
+      }
+    ],
+    "3.1 Initialise Supabase local dev / migrations directory": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649931
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097291339
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097407082
+      }
+    ],
+    "3.2 Wire the Supabase browser client (anon key only)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649934
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097412129
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097549382
+      }
+    ],
+    "3.3 Create a shared server-side Supabase client helper for Edge Functions (service role)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649937
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097413170
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097551257
+      }
+    ],
+    "4.1 Create enumerated types needed for Milestone 1": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649939
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097555193
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097625517
+      }
+    ],
+    "4.2 Create the `events` table with columns, keys, and CHECK constraints": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649943
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097632085
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097731038
+      }
+    ],
+    "4.3 Add required indexes and uniqueness constraints on `events`": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649946
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097737883
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097828198
+      }
+    ],
+    "4.4 Create the `admin_profiles` table linked to `auth.users`": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649948
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097633091
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097731940
+      }
+    ],
+    "4.5 Create the `audit_log` table": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649952
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097634008
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097732757
+      }
+    ],
+    "4.6 Create the `event_is_live(event_id)` SQL helper predicate": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649955
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097738850
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097827195
+      }
+    ],
+    "5.1 Enable RLS and add read policies for `events`": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649958
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097833106
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098161059
+      }
+    ],
+    "5.2 Enable RLS on `admin_profiles` and `audit_log`": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649960
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097834003
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098159813
+      }
+    ],
+    "6.1 Implement the admin auth client and session helpers": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649964
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098170930
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098428109
+      }
+    ],
+    "6.2 Build the `/admin/login` route and login form": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649966
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098822806
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099016822
+      }
+    ],
+    "6.3 Implement the `RequireAuth` protected-route wrapper": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649969
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098573015
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098813467
+      }
+    ],
+    "7.1 Define shared Zod schemas for event create/edit input": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649971
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098169527
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098426663
+      }
+    ],
+    "7.2 Implement the authenticated event-create Edge Function": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649975
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098572578
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098812737
+      }
+    ],
+    "7.3 Implement the event-status transition Edge Function": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649978
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099026905
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099194664
+      }
+    ],
+    "8.1 Build the event create/edit form (event editor route)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649981
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099218196
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099526747
+      }
+    ],
+    "8.2 Build the status-transition control": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649984
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099530730
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099835131
+      }
+    ],
+    "8.3 Implement the `QrDisplay` component": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649987
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099027663
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099195247
+      }
+    ],
+    "9.1 Add seed data for a demo event": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649990
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099531633
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099835781
+      }
+    ],
+    "10.1 Verify the Milestone 1 definition of done": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649992
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099840077
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788100049342
+      }
+    ],
+    "11. Milestone 2: Core Live Q&A — expand into detailed tasks when the milestone begins": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649995
+      }
+    ],
+    "12. Milestone 3: Polls and Word Cloud — expand into detailed tasks when the milestone begins": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096649999
+      }
+    ],
+    "13. Milestone 4: AI Features — expand into detailed tasks when the milestone begins": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096650003
+      }
+    ],
+    "14. Milestone 5: Export, Hardening, Event Readiness — expand into detailed tasks when the milestone begins": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788096650006
+      }
+    ],
+    "1. Scaffold the React + TypeScript + Vite project and developer tooling": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097285932
+      }
+    ],
+    "2. Establish environment configuration and `.env.example`": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097406192
+      }
+    ],
+    "2.2 Write a unit test asserting no server-only secret is referenced in client code": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097411227
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097550405
+      }
+    ],
+    "3. Set up Supabase project structure and client wiring": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097551266
+      }
+    ],
+    "4. Create the initial database migration (enums + foundation tables)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097828204
+      }
+    ],
+    "4.7 Write a migration/schema unit test that builds the schema from scratch": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788097835121
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098161758
+      }
+    ],
+    "5. Configure Row Level Security for the foundation tables": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098161062
+      }
+    ],
+    "5.3 Write RLS tests for event visibility (anonymous)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098171878
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098429066
+      }
+    ],
+    "5.4 Write RLS tests for event mutation denial (anonymous)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098172775
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788098429981
+      }
+    ],
+    "6. Configure administrator authentication (Supabase Auth, admin-only)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099016826
+      }
+    ],
+    "7. Implement event creation and event-status management (authenticated Edge Function)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099194667
+      }
+    ],
+    "7.4 Write unit tests for event validation and status-transition rules": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099219141
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099524661
+      }
+    ],
+    "7.5 Write a property-based test for event-status gating groundwork (Property 11)": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099220537
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099526058
+      }
+    ],
+    "6.4 Write unit tests for `RequireAuth` and administrator authorisation": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099221340
+      },
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099523708
+      }
+    ],
+    "8. Build the minimal admin event UI and QR display": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099835134
+      }
+    ],
+    "9. Create Milestone 1 seed data": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788099835784
+      }
+    ],
+    "10. Milestone 1 checkpoint — verify foundation completeness": [
+      {
+        "executionId": "57a01e31-a767-4e3b-86d2-8d789da98ab7",
+        "chatSessionId": "7fdd3bbe-bf8f-4644-8f94-1a0e9d9c74e4",
+        "timestamp": 1788100049352
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Build output
+dist
+dist-ssr
+build
+
+# Dependencies
+node_modules
+
+# Caches / generated
+.vite
+coverage
+*.tsbuildinfo
+package-lock.json
+
+# Spec documents (authored markdown / metadata; not source to reformat)
+.kiro

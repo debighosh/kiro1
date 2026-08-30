@@ -1,0 +1,32 @@
+{
+  /*
+   * Test-oriented TypeScript config.
+   *
+   * The production app build (`tsc -b`, driven by tsconfig.app.json) EXCLUDES
+   * *.test.* / *.spec.* / src/test so it never depends on Node built-ins or the
+   * Vitest globals. This config is the counterpart used to typecheck the tests
+   * themselves. It extends the app config (inheriting the DOM libs so jsdom UI
+   * tests typecheck) and layers on the node + Vitest + jest-dom ambient types so
+   * Node-based tests (e.g. src/db/migrations.test.ts using node:fs/path/url) and
+   * the `globals: true` Vitest API both resolve.
+   *
+   * Run explicitly via `npm run typecheck:test`. Intentionally NOT wired into
+   * the root tsconfig.json `references`, so `npm run build` does not compile
+   * test files.
+   */
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": [
+    "src/vite-env.d.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/test/**/*",
+    "vite.config.ts"
+  ],
+  "exclude": []
+}
