@@ -11,11 +11,15 @@ import { getParticipantIdentifier } from '../lib/participant';
 import {
   isPresenterMode,
   readFeaturedQuestion,
+  readPresenterActivePoll,
   readPresenterQuestions,
+  readPresenterWordCloud,
   subscribeToPresenter,
+  type PresenterActivePoll,
   type PresenterMode,
   type PresenterQuestion,
 } from '../lib/presenter';
+import { aggregateWordCloud, type WordCloudTerm } from '../lib/wordcloud';
 import { EventJoinCard } from '../components/EventJoinCard';
 import { QrDisplay } from '../components/QrDisplay';
 import { QuestionSubmissionForm } from '../components/QuestionSubmissionForm';
@@ -704,8 +708,19 @@ type PresenterStatus = 'loading' | 'ready' | 'unavailable';
  *    (slug) + the event name (Req 7.10).
  *  - `featured_question`: the highest-priority `featured` question (most votes).
  *  - `top_questions`: the top presentable questions ordered by votes desc.
- *  - `waiting` / any M3+ mode (`poll_results`/`word_cloud`/`ai_themes`): a
- *    waiting-screen fallback.
+ *  - `poll_results` (M3, task 24.1): the active poll's visibility-aware results.
+ *    Respects `results_visibility` — for `hide_until_closed` the tallies are
+ *    withheld until the poll is `closed` (a placeholder is shown while open);
+ *    for `show_always` the per-option tallies render while open. Rendered as a
+ *    projector-friendly accessible list of option text + `response_count` (no
+ *    charts — Recharts is the audience surface). `participant_identifier` is
+ *    never read nor rendered (Req 5.11, 7.8, 8.6).
+ *  - `word_cloud` (M3, task 24.1): the aggregated live word cloud for the
+ *    active prompt, EXCLUDING hidden entries, sized via {@link aggregateWordCloud}
+ *    (`../lib/wordcloud`) — rendered as a sized term list (font-size ∝ size).
+ *    `participant_identifier` is never read nor rendered (Req 6.13, 7.9, 8.6).
+ *  - `waiting` / any remaining M3+ mode (`ai_themes`): a waiting-screen
+ *    fallback.
  *
  * Visibility (Req 7.9): `pending`/`hidden` questions are excluded from EVERY
  * mode — the read helpers filter to presentable statuses and RLS excludes the
@@ -718,9 +733,10 @@ type PresenterStatus = 'loading' | 'ready' | 'unavailable';
  * displayed content is retained and an interruption indicator is shown
  * (Req 7.7); it clears when the connection recovers.
  *
- * Requirements traceability: 7.9, 7.6, 7.7, 7.5, 7.10.
+ * Requirements traceability: 7.9, 7.6, 7.7, 7.5, 7.10, 7.4, 7.8, 5.11, 6.13.
  * Design: Request/data flows (Presenter mode switching); Frontend Design
- * (Route map — `/present/:eventRef`).
+ * (Route map — `/present/:eventRef`); Data Models (`presenter_mode` enum
+ * values `poll_results`, `word_cloud`).
  */
 export function PresenterView(): JSX.Element {
   const { eventRef } = useParams();
@@ -730,6 +746,11 @@ export function PresenterView(): JSX.Element {
   const [mode, setMode] = useState<PresenterMode>('waiting');
   const [questions, setQuestions] = useState<PresenterQuestion[]>([]);
   const [featured, setFeatured] = useState<PresenterQuestion | null>(null);
+  // Milestone 3 modes (task 24.1): the active poll for `poll_results` and the
+  // aggregated visible terms for `word_cloud`. Both start empty and are loaded
+  // on mode/event change below.
+  const [poll, setPoll] = useState<PresenterActivePoll | null>(null);
+  const [wordCloudTerms, setWordCloudTerms] = useState<WordCloudTerm[]>([]);
   // Live-connection interruption indicator (Req 7.7). When true the last-good
   // content above is retained and an interruption banner is shown.
   const [interrupted, setInterrupted] = useState(false);
@@ -777,6 +798,15 @@ export function PresenterView(): JSX.Element {
       } else if (currentMode === 'top_questions') {
         const list = await readPresenterQuestions(id);
         setQuestions((prev) => (list.length > 0 ? list : prev));
+      } else if (currentMode === 'poll_results') {
+        // TASK 24.2 HOOK: retain-last-content on a null read is added here.
+        const active = await readPresenterActivePoll(id);
+        setPoll((prev) => active ?? prev);
+      } else if (currentMode === 'word_cloud') {
+        // TASK 24.2 HOOK: retain-last-content on an empty read is added here.
+        const { responses } = await readPresenterWordCloud(id);
+        const terms = aggregateWordCloud(responses);
+        setWordCloudTerms((prev) => (terms.length > 0 ? terms : prev));
       }
     },
     [],
@@ -795,6 +825,17 @@ export function PresenterView(): JSX.Element {
       } else if (mode === 'top_questions') {
         const list = await readPresenterQuestions(eventId);
         if (active) setQuestions(list);
+      } else if (mode === 'poll_results') {
+        // Initial load for the poll_results mode (task 24.1). Retain-last-
+        // content + realtime refresh is task 24.2; here we simply reflect the
+        // current active poll (or null when there is none).
+        const activePoll = await readPresenterActivePoll(eventId);
+        if (active) setPoll(activePoll);
+      } else if (mode === 'word_cloud') {
+        // Initial load for the word_cloud mode (task 24.1). Aggregate the
+        // visible responses via the shared, pure aggregator.
+        const { responses } = await readPresenterWordCloud(eventId);
+        if (active) setWordCloudTerms(aggregateWordCloud(responses));
       }
     })();
     return () => {
@@ -947,8 +988,93 @@ export function PresenterView(): JSX.Element {
             <p className="text-3xl text-white/80">No questions yet.</p>
           )}
         </section>
+      ) : mode === 'poll_results' ? (
+        /* Poll results (task 24.1). Visibility-aware: `hide_until_closed`
+           withholds the tallies until the poll is `closed`; `show_always`
+           renders them while open. Projector-friendly accessible list — NO
+           charts (Recharts is the audience surface). Never renders any
+           participant data (Req 5.11, 7.8, 8.6). */
+        <section
+          data-testid="presenter-poll-results"
+          className="flex w-full flex-col items-center gap-6"
+        >
+          {poll ? (
+            (() => {
+              // Tallies are withheld while an OPEN poll is set to
+              // hide_until_closed; shown once closed, or when show_always.
+              const revealTallies =
+                poll.status === 'closed' ||
+                poll.results_visibility === 'show_always';
+              return (
+                <>
+                  <h2 className="max-w-5xl text-4xl font-bold leading-tight">
+                    {poll.question_text}
+                  </h2>
+                  {revealTallies ? (
+                    <ul className="flex w-full max-w-5xl flex-col gap-4 text-left">
+                      {poll.options.map((option) => (
+                        <li
+                          key={option.id}
+                          data-testid="presenter-poll-option"
+                          className="flex items-center justify-between gap-6 rounded border border-white/20 px-6 py-4"
+                        >
+                          <span className="text-4xl font-semibold leading-tight">
+                            {option.text}
+                          </span>
+                          <span
+                            aria-label={`${option.response_count} responses`}
+                            className="shrink-0 text-4xl font-bold tabular-nums"
+                          >
+                            {option.response_count}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p
+                      data-testid="presenter-poll-hidden"
+                      className="text-3xl text-white/80"
+                    >
+                      Results are hidden until the poll closes.
+                    </p>
+                  )}
+                </>
+              );
+            })()
+          ) : (
+            <p className="text-3xl text-white/80">No active poll yet.</p>
+          )}
+        </section>
+      ) : mode === 'word_cloud' ? (
+        /* Word cloud (task 24.1). Renders the aggregated visible terms sized by
+           frequency (font-size ∝ size). Hidden entries are excluded upstream by
+           the read + RLS, and by `aggregateWordCloud`. Never renders any
+           participant data (Req 6.13, 7.9, 8.6). */
+        <section
+          data-testid="presenter-word-cloud"
+          className="flex w-full flex-col items-center gap-6"
+        >
+          <h2 className="text-3xl font-semibold text-white/80">Word cloud</h2>
+          {wordCloudTerms.length > 0 ? (
+            <ul className="flex max-w-5xl flex-wrap items-center justify-center gap-x-6 gap-y-3">
+              {wordCloudTerms.map((term) => (
+                <li
+                  key={term.term}
+                  data-testid="presenter-word-cloud-term"
+                  aria-label={`${term.term}, ${term.frequency} mentions`}
+                  className="font-bold leading-none"
+                  style={{ fontSize: `${term.size}px` }}
+                >
+                  {term.term}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-3xl text-white/80">No responses yet.</p>
+          )}
+        </section>
       ) : (
-        /* waiting / poll_results / word_cloud / ai_themes (M3+) fallback. */
+        /* waiting / ai_themes (M3+) fallback. */
         <section
           data-testid="presenter-waiting-mode"
           className="flex flex-col items-center gap-6"

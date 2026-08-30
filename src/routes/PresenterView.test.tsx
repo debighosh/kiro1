@@ -29,12 +29,20 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 // --- Mock the presenter data layer + event lookup. -------------------------
-const { findEventByRef, readFeaturedQuestion, readPresenterQuestions } =
-  vi.hoisted(() => ({
-    findEventByRef: vi.fn(),
-    readFeaturedQuestion: vi.fn(),
-    readPresenterQuestions: vi.fn(),
-  }));
+const {
+  findEventByRef,
+  readFeaturedQuestion,
+  readPresenterQuestions,
+  readPresenterActivePoll,
+  readPresenterWordCloud,
+} = vi.hoisted(() => ({
+  findEventByRef: vi.fn(),
+  readFeaturedQuestion: vi.fn(),
+  readPresenterQuestions: vi.fn(),
+  // task 24.1: the M3 presenter modes (poll_results / word_cloud).
+  readPresenterActivePoll: vi.fn(),
+  readPresenterWordCloud: vi.fn(),
+}));
 
 vi.mock('../lib/eventLookup', () => ({
   findEventByRef: (ref: unknown) => findEventByRef(ref),
@@ -80,6 +88,10 @@ vi.mock('../lib/presenter', () => ({
   readFeaturedQuestion: (id: string) => readFeaturedQuestion(id),
   readPresenterQuestions: (id: string, limit?: number) =>
     readPresenterQuestions(id, limit),
+  // task 24.1: the M3 presenter reads. Delegate to the hoisted mocks (defaults
+  // set in beforeEach) so importing the screen stays env/network-free.
+  readPresenterActivePoll: (id: string) => readPresenterActivePoll(id),
+  readPresenterWordCloud: (id: string) => readPresenterWordCloud(id),
   subscribeToPresenter: () => () => {},
   isPresenterMode: (v: unknown) =>
     typeof v === 'string' &&
@@ -117,6 +129,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   readFeaturedQuestion.mockResolvedValue(null);
   readPresenterQuestions.mockResolvedValue([]);
+  // task 24.1 defaults: no active poll and an empty word cloud unless a test
+  // overrides them.
+  readPresenterActivePoll.mockResolvedValue(null);
+  readPresenterWordCloud.mockResolvedValue({ prompt: null, responses: [] });
 });
 
 describe('PresenterView', () => {
@@ -212,10 +228,47 @@ describe('PresenterView', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('falls back to a waiting screen for an M3+ mode (e.g. poll_results)', async () => {
+  it('renders the poll_results section for the poll_results mode (task 24.1)', async () => {
     findEventByRef.mockResolvedValue({
       ...LIVE_EVENT,
       active_presenter_mode: 'poll_results',
+    });
+
+    renderPresenter();
+
+    // The M3 poll_results mode now renders its own projector section rather
+    // than falling back to the waiting screen (task 24.1). With no active poll
+    // (the default mock) it shows the empty-state copy.
+    expect(
+      await screen.findByTestId('presenter-poll-results'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('presenter-waiting-mode'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the word_cloud section for the word_cloud mode (task 24.1)', async () => {
+    findEventByRef.mockResolvedValue({
+      ...LIVE_EVENT,
+      active_presenter_mode: 'word_cloud',
+    });
+
+    renderPresenter();
+
+    // The M3 word_cloud mode now renders its own projector section rather than
+    // falling back to the waiting screen (task 24.1).
+    expect(
+      await screen.findByTestId('presenter-word-cloud'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('presenter-waiting-mode'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('falls back to a waiting screen for the ai_themes mode (M4+)', async () => {
+    findEventByRef.mockResolvedValue({
+      ...LIVE_EVENT,
+      active_presenter_mode: 'ai_themes',
     });
 
     renderPresenter();

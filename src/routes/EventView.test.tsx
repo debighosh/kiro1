@@ -88,6 +88,13 @@ vi.mock('../lib/questions', () => ({
 vi.mock('../lib/presenter', () => ({
   readPresenterQuestions: vi.fn().mockResolvedValue([]),
   readFeaturedQuestion: vi.fn().mockResolvedValue(null),
+  // task 24.1: `PresenterView` also reads the active poll + word cloud for the
+  // M3 presenter modes. Stub them to the empty defaults so importing the screen
+  // stays env/network-free.
+  readPresenterActivePoll: vi.fn().mockResolvedValue(null),
+  readPresenterWordCloud: vi
+    .fn()
+    .mockResolvedValue({ prompt: null, responses: [] }),
   subscribeToPresenter: () => () => {},
   isPresenterMode: (v: unknown) =>
     typeof v === 'string' &&
