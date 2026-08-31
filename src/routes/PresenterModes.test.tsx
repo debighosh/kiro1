@@ -121,6 +121,24 @@ vi.mock('../lib/presenter', () => ({
     ].includes(v),
 }));
 
+// task 34.3: `./screens` imports `../lib/aiClient` (presenter `ai_themes` mode
+// + moderation-queue categorisation). Stub the surface so importing the screen
+// stays env/network-free. These tests exercise the M3 poll/word-cloud modes,
+// not ai_themes, so a default empty (has_data:false) result is sufficient.
+vi.mock('../lib/aiClient', () => ({
+  runThemeInsights: vi.fn().mockResolvedValue({
+    available: true,
+    insights: {
+      top_themes: [],
+      emerging_concerns: [],
+      frequent_topics: [],
+      notable_high_vote_questions: [],
+      has_data: false,
+    },
+  }),
+  AiClientError: class AiClientError extends Error {},
+}));
+
 import { PresenterView } from './screens';
 
 /**

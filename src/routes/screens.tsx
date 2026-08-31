@@ -28,6 +28,8 @@ import {
   DEFAULT_MAX_SIZE,
   type WordCloudTerm,
 } from '../lib/wordcloud';
+import { runThemeInsights } from '../lib/aiClient';
+import type { AiThemeInsightsResult } from '../schemas/ai';
 import { EventJoinCard } from '../components/EventJoinCard';
 import { QrDisplay } from '../components/QrDisplay';
 import { QuestionSubmissionForm } from '../components/QuestionSubmissionForm';
@@ -783,8 +785,15 @@ function termsFromWordCloudBroadcast(
  *    active prompt, EXCLUDING hidden entries, sized via {@link aggregateWordCloud}
  *    (`../lib/wordcloud`) — rendered as a sized term list (font-size ∝ size).
  *    `participant_identifier` is never read nor rendered (Req 6.13, 7.9, 8.6).
- *  - `waiting` / any remaining M3+ mode (`ai_themes`): a waiting-screen
- *    fallback.
+ *  - `ai_themes` (M4, task 34.3): the AI theme-insights output — top themes,
+ *    emerging concerns, frequent topics, and notable high-vote questions —
+ *    fetched via `runThemeInsights` (`../lib/aiClient`) when the mode becomes
+ *    active. Projector-optimised + ARIA-labelled; ALL AI-produced strings are
+ *    rendered as PLAIN TEXT (Req 14.8). The has_data:false / degraded (AI
+ *    disabled/not-configured, Req 19.1) / empty cases render a friendly notice;
+ *    the AI failure never blocks the core flow. The mode switch reflects within
+ *    2 s via the same realtime subscription (Req 7.5).
+ *  - `waiting` / any remaining mode: a waiting-screen fallback.
  *
  * Visibility (Req 7.9): `pending`/`hidden` questions are excluded from EVERY
  * mode — the read helpers filter to presentable statuses and RLS excludes the
@@ -826,6 +835,12 @@ export function PresenterView(): JSX.Element {
   // on mode/event change below.
   const [poll, setPoll] = useState<PresenterActivePoll | null>(null);
   const [wordCloudTerms, setWordCloudTerms] = useState<WordCloudTerm[]>([]);
+  // Milestone 4 mode (task 34.3): the AI theme-insights result for `ai_themes`.
+  // `null` means "not yet loaded / no result to show"; `unavailable` means the
+  // AI feature is disabled/not-configured (a normal degraded state, Req 19.1).
+  const [themeInsights, setThemeInsights] =
+    useState<AiThemeInsightsResult | null>(null);
+  const [themesUnavailable, setThemesUnavailable] = useState(false);
   // Live-connection interruption indicator (Req 7.7). When true the last-good
   // content above is retained and an interruption banner is shown.
   const [interrupted, setInterrupted] = useState(false);
@@ -860,6 +875,41 @@ export function PresenterView(): JSX.Element {
 
   const eventId = event?.id ?? null;
 
+  // Task 34.3: load the AI theme-insights for the `ai_themes` mode via the AI
+  // Gateway. A stable callback so both the initial load and the realtime
+  // refresh reuse it. The mode switch itself is realtime (subscribeToPresenter,
+  // Req 7.5) so this reflects within 2 s of the moderator selecting the mode.
+  //
+  // Degraded state (Req 19.1): when AI is disabled/not-configured the Gateway
+  // returns `available: false`; we flag `themesUnavailable` and show a friendly
+  // notice — the AI failure NEVER blocks the presenter (core flow unaffected).
+  //
+  // Errors / retain-last-content (Req 7.7): a thrown AiClientError (transport,
+  // provider, or malformed) is swallowed; when `retain` is true we keep the
+  // previously-displayed insights, otherwise (a fresh mode selection) we clear
+  // to `null` so a stale panel is never shown for a new event/mode.
+  const loadThemeInsights = useCallback(
+    async (id: string, opts: { retain: boolean }): Promise<void> => {
+      try {
+        const response = await runThemeInsights(id);
+        if (response.available) {
+          setThemesUnavailable(false);
+          setThemeInsights(response.insights);
+        } else {
+          // AI unavailable — a normal degraded state (Req 19.1).
+          setThemesUnavailable(true);
+          if (!opts.retain) setThemeInsights(null);
+        }
+      } catch {
+        // Recoverable failure (Req 19.1): never surface internals; retain the
+        // last insights on a refresh, or clear on a fresh selection.
+        setThemesUnavailable(false);
+        if (!opts.retain) setThemeInsights(null);
+      }
+    },
+    [],
+  );
+
   // Load (and reload) the questions this mode needs. Kept as a stable callback
   // so both the initial load and the realtime handler can reuse it. On a read
   // failure the helpers return empty; we RETAIN the previous content (Req 7.7)
@@ -882,9 +932,13 @@ export function PresenterView(): JSX.Element {
         const { responses } = await readPresenterWordCloud(id);
         const terms = aggregateWordCloud(responses);
         setWordCloudTerms((prev) => (terms.length > 0 ? terms : prev));
+      } else if (currentMode === 'ai_themes') {
+        // Task 34.3: re-run the theme-insights job. On any failure we RETAIN
+        // the last-displayed insights (Req 7.7) rather than blanking the panel.
+        await loadThemeInsights(id, { retain: true });
       }
     },
-    [],
+    [loadThemeInsights],
   );
 
   // Initial content load whenever the resolved event or mode changes.
@@ -911,12 +965,22 @@ export function PresenterView(): JSX.Element {
         // visible responses via the shared, pure aggregator.
         const { responses } = await readPresenterWordCloud(eventId);
         if (active) setWordCloudTerms(aggregateWordCloud(responses));
+      } else if (mode === 'ai_themes') {
+        // Initial load for the ai_themes mode (task 34.3). A FRESH selection
+        // clears the last insights (retain: false) so no stale panel shows for
+        // a new event/mode; the mode switch is realtime so this reflects within
+        // 2 s (Req 7.5). Guarded by `active` to avoid a post-unmount update.
+        if (active) {
+          setThemeInsights(null);
+          setThemesUnavailable(false);
+        }
+        await loadThemeInsights(eventId, { retain: false });
       }
     })();
     return () => {
       active = false;
     };
-  }, [status, eventId, mode]);
+  }, [status, eventId, mode, loadThemeInsights]);
 
   // Realtime subscription (Req 7.6, 7.7): reflect mode changes + question/vote
   // updates within ~2 s without a manual refresh, scoped to THIS event only.
@@ -1185,8 +1249,141 @@ export function PresenterView(): JSX.Element {
             <p className="text-3xl text-white/80">No responses yet.</p>
           )}
         </section>
+      ) : mode === 'ai_themes' ? (
+        /* AI theme insights (task 34.3). Renders the theme-insights output —
+           top themes, emerging concerns, frequent topics, and notable
+           high-vote questions — projector-optimised (large, high-contrast) and
+           ARIA-labelled (a labelled region + labelled sub-sections). ALL AI-
+           produced strings are rendered as PLAIN TEXT via JSX text content
+           (Req 14.8) — never via dangerouslySetInnerHTML/innerHTML. Handles the
+           has_data:false / degraded / empty cases gracefully; the AI failure
+           never blocks the core flow (Req 19.1). */
+        <section
+          data-testid="presenter-ai-themes"
+          aria-label="AI theme insights"
+          className="flex w-full flex-col items-center gap-8"
+        >
+          <h2 className="text-3xl font-semibold text-white/80">
+            AI theme insights
+          </h2>
+          {themesUnavailable ? (
+            <p
+              data-testid="presenter-ai-themes-unavailable"
+              className="text-3xl text-white/80"
+            >
+              AI insights are not available right now.
+            </p>
+          ) : themeInsights && themeInsights.has_data ? (
+            <div className="flex w-full max-w-6xl flex-col gap-10 text-left">
+              {themeInsights.top_themes.length > 0 ? (
+                <section
+                  aria-label="Top themes"
+                  className="flex flex-col gap-4"
+                >
+                  <h3 className="text-3xl font-bold text-white/90">
+                    Top themes
+                  </h3>
+                  <ul className="flex flex-col gap-3">
+                    {themeInsights.top_themes.map((theme, index) => (
+                      <li
+                        key={`theme-${index}`}
+                        data-testid="presenter-ai-top-theme"
+                        className="rounded border border-white/20 px-6 py-4 text-4xl font-semibold leading-tight"
+                      >
+                        {theme}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {themeInsights.emerging_concerns.length > 0 ? (
+                <section
+                  aria-label="Emerging concerns"
+                  className="flex flex-col gap-4"
+                >
+                  <h3 className="text-3xl font-bold text-white/90">
+                    Emerging concerns
+                  </h3>
+                  <ul className="flex flex-col gap-3">
+                    {themeInsights.emerging_concerns.map((concern, index) => (
+                      <li
+                        key={`concern-${index}`}
+                        data-testid="presenter-ai-emerging-concern"
+                        className="rounded border border-white/20 px-6 py-4 text-4xl font-semibold leading-tight"
+                      >
+                        {concern}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {themeInsights.frequent_topics.length > 0 ? (
+                <section
+                  aria-label="Frequent topics"
+                  className="flex flex-col gap-4"
+                >
+                  <h3 className="text-3xl font-bold text-white/90">
+                    Frequent topics
+                  </h3>
+                  <ul className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                    {themeInsights.frequent_topics.map((topic, index) => (
+                      <li
+                        key={`topic-${index}`}
+                        data-testid="presenter-ai-frequent-topic"
+                        className="rounded-full border border-white/20 px-5 py-2 text-3xl font-semibold leading-none"
+                      >
+                        {topic}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {themeInsights.notable_high_vote_questions.length > 0 ? (
+                <section
+                  aria-label="Notable high-vote questions"
+                  className="flex flex-col gap-4"
+                >
+                  <h3 className="text-3xl font-bold text-white/90">
+                    Notable high-vote questions
+                  </h3>
+                  <ol className="flex flex-col gap-4">
+                    {themeInsights.notable_high_vote_questions.map(
+                      (question) => (
+                        <li
+                          key={question.question_id}
+                          data-testid="presenter-ai-notable-question"
+                          className="flex items-start justify-between gap-6 rounded border border-white/20 px-6 py-4"
+                        >
+                          <span className="text-4xl font-semibold leading-tight">
+                            {question.text}
+                          </span>
+                          <span
+                            aria-label={`${question.vote_count} votes`}
+                            className="shrink-0 text-4xl font-bold tabular-nums"
+                          >
+                            ▲ {question.vote_count}
+                          </span>
+                        </li>
+                      ),
+                    )}
+                  </ol>
+                </section>
+              ) : null}
+            </div>
+          ) : (
+            <p
+              data-testid="presenter-ai-themes-empty"
+              className="text-3xl text-white/80"
+            >
+              No theme insights yet.
+            </p>
+          )}
+        </section>
       ) : (
-        /* waiting / ai_themes (M3+) fallback. */
+        /* waiting / any remaining mode fallback. */
         <section
           data-testid="presenter-waiting-mode"
           className="flex flex-col items-center gap-6"

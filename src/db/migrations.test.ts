@@ -937,3 +937,321 @@ describe('Milestone 3 schema / migrations (Polls & Word Cloud tables)', () => {
     });
   });
 });
+
+/**
+ * Task 26.4 — Milestone 4 (AI Features) schema / migration verification.
+ *
+ * WHAT THIS BLOCK ADDS
+ * --------------------
+ * This extends the static, source-level migration guard above to cover the
+ * Milestone 4 AI data model, using the SAME approach as the Milestone-1/2/3
+ * assertions: it reads the actual migration SQL files that ship in the repo
+ * (whitespace-normalised via `normaliseSql` + `flat[FILENAME]`) and asserts,
+ * from scratch — WITHOUT a live database — that:
+ *   - the four M4 enums are defined with EXACTLY the expected values:
+ *       * provider_type ('openai_compatible','custom_adapter'),
+ *       * ai_auth_type  ('bearer','api_key_header','none'),
+ *       * ai_job_type   ('categorisation','clustering','theme_insights',
+ *                        'summary','connection_test'),
+ *       * ai_job_status ('pending','running','succeeded','failed')
+ *     (all in 20260101000030_ai_provider_settings.sql);
+ *   - the `ai_provider_settings` table declares the design's CHECK semantics:
+ *     display_name 1..100, base_url 1..2048 AND an absolute-URL regex CHECK
+ *     (base_url ~ '^https?://'), chat_completions_path 1..512, model_id 1..200,
+ *     temperature BETWEEN 0.0 AND 2.0, max_output_tokens BETWEEN 1 AND 128000,
+ *     request_timeout_seconds BETWEEN 1 AND 300, tls_verify_required DEFAULT
+ *     true; the partial UNIQUE index `one_active_ai_provider ON
+ *     ai_provider_settings(is_active) WHERE is_active`; the credential XOR CHECK
+ *     `num_nonnulls(secret_reference, encrypted_credential) <= 1`; and the
+ *     GENERATED `credential_state ... GENERATED ALWAYS AS ... STORED` column;
+ *   - `ai_jobs` (20260101000031_ai_jobs.sql) has job_type ai_job_type / status
+ *     ai_job_status columns, an event_id FK → events(id) ON DELETE CASCADE, the
+ *     `attempt_count >= 0` CHECK, and idx_ai_jobs_event;
+ *   - `question_clusters` (20260101000032_question_clusters.sql) has the
+ *     `char_length(label) BETWEEN 1 AND 100` CHECK, the event_id FK → events(id)
+ *     ON DELETE CASCADE, and the DEFERRED FK attached to the existing
+ *     questions.cluster_id column (ALTER TABLE questions ... FOREIGN KEY
+ *     (cluster_id) REFERENCES question_clusters (id) ON DELETE SET NULL);
+ *   - all three M4 migration file names sort AFTER
+ *     20260101000029_poll_broadcast.sql, and in intra-M4 dependency order
+ *     (…030 before …031 before …032) so the schema builds cleanly from a fresh
+ *     database: …030 defines the ai_job enums …031 uses, and …032's deferred FK
+ *     references the question_clusters table it just created.
+ *
+ * As with Milestone 1/2/3, a live-DB apply (real INSERTs exercising the CHECKs,
+ * the partial-unique index, the XOR and the generated column) is DEFERRED TO CI,
+ * where a PostgreSQL service is available — no Postgres/psql/pg-mem can
+ * faithfully apply these migrations in this sandbox (see the Milestone-1
+ * rationale above). This static block is the always-on regression guard: the
+ * assertions match the constraint SEMANTICS (the numeric bounds, the absolute
+ * URL regex, the WHERE is_active partial predicate, the num_nonnulls XOR, the
+ * GENERATED ... STORED clause, the specific FK targets/cascades and the SET
+ * NULL deferred FK) rather than merely the word "CHECK", so a silent weakening
+ * fails the test here.
+ *
+ * Requirements: 11.1, 11.5, 11.7, 11.8, 11.9, 12.6, 14.6, 16.1, 16.4, 16.9,
+ * 19.3, 20.6, 26.1
+ * Design: Data Models (`ai_provider_settings`, `ai_jobs`, `question_clusters`);
+ * Enumerated types; credential XOR CHECK; deferred cluster FK; Migrations.
+ */
+const POLL_BROADCAST_FILE = '20260101000029_poll_broadcast.sql';
+const AI_PROVIDER_SETTINGS_FILE = '20260101000030_ai_provider_settings.sql';
+const AI_JOBS_FILE = '20260101000031_ai_jobs.sql';
+const QUESTION_CLUSTERS_FILE = '20260101000032_question_clusters.sql';
+
+describe('Milestone 4 schema / migrations (AI tables)', () => {
+  it('ships the M4 migration files ordered so the schema builds from scratch', () => {
+    for (const f of [
+      AI_PROVIDER_SETTINGS_FILE,
+      AI_JOBS_FILE,
+      QUESTION_CLUSTERS_FILE,
+    ]) {
+      expect(migrationFiles).toContain(f);
+    }
+
+    const idx = (f: string) => migrationFiles.indexOf(f);
+    // Every M4 migration sorts AFTER the last Milestone-3 migration
+    // (…000029_poll_broadcast), so the foundation + Q&A + polls tables/enums/
+    // helpers they build on already exist when applied from scratch.
+    for (const f of [
+      AI_PROVIDER_SETTINGS_FILE,
+      AI_JOBS_FILE,
+      QUESTION_CLUSTERS_FILE,
+    ]) {
+      expect(idx(POLL_BROADCAST_FILE)).toBeLessThan(idx(f));
+    }
+
+    // …030 defines the ai_job_type / ai_job_status enums that …031's ai_jobs
+    // columns reference, so it must sort before …031.
+    expect(idx(AI_PROVIDER_SETTINGS_FILE)).toBeLessThan(idx(AI_JOBS_FILE));
+    // …032 creates question_clusters and then attaches the deferred FK that
+    // references it, so it must sort after …031 (intra-M4 order …030<…031<…032).
+    expect(idx(AI_JOBS_FILE)).toBeLessThan(idx(QUESTION_CLUSTERS_FILE));
+  });
+
+  describe('AI enumerated types', () => {
+    it('defines provider_type with exactly openai_compatible/custom_adapter', () => {
+      const sql = flat[AI_PROVIDER_SETTINGS_FILE];
+      const m = sql.match(/CREATE TYPE provider_type AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = ['openai_compatible', 'custom_adapter'];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+
+    it('defines ai_auth_type with exactly bearer/api_key_header/none', () => {
+      const sql = flat[AI_PROVIDER_SETTINGS_FILE];
+      const m = sql.match(/CREATE TYPE ai_auth_type AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = ['bearer', 'api_key_header', 'none'];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+
+    it('defines ai_job_type with exactly the five job categories', () => {
+      const sql = flat[AI_PROVIDER_SETTINGS_FILE];
+      const m = sql.match(/CREATE TYPE ai_job_type AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = [
+        'categorisation',
+        'clustering',
+        'theme_insights',
+        'summary',
+        'connection_test',
+      ];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+
+    it('defines ai_job_status with exactly pending/running/succeeded/failed', () => {
+      const sql = flat[AI_PROVIDER_SETTINGS_FILE];
+      const m = sql.match(/CREATE TYPE ai_job_status AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = ['pending', 'running', 'succeeded', 'failed'];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+  });
+
+  describe('ai_provider_settings table', () => {
+    it('creates the ai_provider_settings table', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?ai_provider_settings \(/i,
+      );
+    });
+
+    it('constrains display_name length to 1..100 characters', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(display_name\)\s+BETWEEN\s+1\s+AND\s+100\s*\)/i,
+      );
+    });
+
+    it('constrains base_url length to 1..2048 characters', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(base_url\)\s+BETWEEN\s+1\s+AND\s+2048\s*\)/i,
+      );
+    });
+
+    it('requires base_url to be an absolute http(s) URL via a regex CHECK', () => {
+      // The absolute-URL guard is security/correctness-relevant (rejects
+      // relative or non-http schemes), so it is asserted explicitly rather
+      // than only checking the length bound.
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*base_url\s*~\s*'\^https\?:\/\/'\s*\)/i,
+      );
+    });
+
+    it('constrains chat_completions_path length to 1..512 characters', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(chat_completions_path\)\s+BETWEEN\s+1\s+AND\s+512\s*\)/i,
+      );
+    });
+
+    it('constrains model_id length to 1..200 characters', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(model_id\)\s+BETWEEN\s+1\s+AND\s+200\s*\)/i,
+      );
+    });
+
+    it('constrains temperature to the range 0.0..2.0', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*temperature\s+BETWEEN\s+0\.0\s+AND\s+2\.0\s*\)/i,
+      );
+    });
+
+    it('constrains max_output_tokens to the range 1..128000', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*max_output_tokens\s+BETWEEN\s+1\s+AND\s+128000\s*\)/i,
+      );
+    });
+
+    it('constrains request_timeout_seconds to the range 1..300', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*request_timeout_seconds\s+BETWEEN\s+1\s+AND\s+300\s*\)/i,
+      );
+    });
+
+    it('defaults tls_verify_required to true (boolean NOT NULL DEFAULT true)', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /tls_verify_required\s+boolean\s+NOT NULL\s+DEFAULT\s+true/i,
+      );
+    });
+
+    it('declares the one_active_ai_provider partial UNIQUE index WHERE is_active', () => {
+      // The partial predicate is the whole point: dropping WHERE is_active
+      // would forbid more than one row entirely (including historical
+      // inactive configs), so the predicate is asserted explicitly.
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CREATE UNIQUE INDEX (IF NOT EXISTS )?one_active_ai_provider\s+ON ai_provider_settings \(is_active\)\s+WHERE is_active/i,
+      );
+    });
+
+    it('enforces the credential XOR via num_nonnulls(...) <= 1', () => {
+      // secret_reference and encrypted_credential are never BOTH populated —
+      // assert the exact num_nonnulls semantics rather than just "CHECK".
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /CHECK\s*\(\s*num_nonnulls\(\s*secret_reference\s*,\s*encrypted_credential\s*\)\s*<=\s*1\s*\)/i,
+      );
+    });
+
+    it('declares credential_state as a GENERATED ALWAYS ... STORED column', () => {
+      // The state is a derived, always-stored column — never a client-writable
+      // one — so assert the GENERATED ALWAYS AS ... STORED clause explicitly.
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /credential_state\s+text\s+GENERATED ALWAYS AS \(.*\) STORED/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[AI_PROVIDER_SETTINGS_FILE]).toMatch(
+        /\bid\b[^,]*PRIMARY KEY/i,
+      );
+    });
+  });
+
+  describe('ai_jobs table', () => {
+    it('creates the ai_jobs table', () => {
+      expect(flat[AI_JOBS_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?ai_jobs \(/i,
+      );
+    });
+
+    it('types job_type as ai_job_type and status as ai_job_status', () => {
+      const sql = flat[AI_JOBS_FILE];
+      expect(sql).toMatch(/job_type\s+ai_job_type\s+NOT NULL/i);
+      expect(sql).toMatch(/status\s+ai_job_status\s+NOT NULL/i);
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      expect(flat[AI_JOBS_FILE]).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('requires attempt_count to be non-negative (>= 0)', () => {
+      expect(flat[AI_JOBS_FILE]).toMatch(
+        /CHECK\s*\(\s*attempt_count\s*>=\s*0\s*\)/i,
+      );
+    });
+
+    it('creates idx_ai_jobs_event on (event_id)', () => {
+      expect(flat[AI_JOBS_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_ai_jobs_event\s+ON ai_jobs \(event_id\)/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[AI_JOBS_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+
+  describe('question_clusters table', () => {
+    it('creates the question_clusters table', () => {
+      expect(flat[QUESTION_CLUSTERS_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?question_clusters \(/i,
+      );
+    });
+
+    it('constrains label length to 1..100 characters', () => {
+      expect(flat[QUESTION_CLUSTERS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(label\)\s+BETWEEN\s+1\s+AND\s+100\s*\)/i,
+      );
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      expect(flat[QUESTION_CLUSTERS_FILE]).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('attaches the deferred questions.cluster_id FK → question_clusters(id) ON DELETE SET NULL', () => {
+      // The M2 questions migration left cluster_id as a plain nullable uuid;
+      // this migration adds the FK once question_clusters exists. ON DELETE SET
+      // NULL (NOT CASCADE) is the semantically essential behaviour — deleting a
+      // cluster clears, rather than deletes, its member questions.
+      expect(flat[QUESTION_CLUSTERS_FILE]).toMatch(
+        /ALTER TABLE questions\s+ADD CONSTRAINT \w+\s+FOREIGN KEY \(cluster_id\)\s+REFERENCES question_clusters \(id\)\s+ON DELETE SET NULL/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[QUESTION_CLUSTERS_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+});

@@ -35,6 +35,7 @@ const {
   readPresenterQuestions,
   readPresenterActivePoll,
   readPresenterWordCloud,
+  runThemeInsights,
 } = vi.hoisted(() => ({
   findEventByRef: vi.fn(),
   readFeaturedQuestion: vi.fn(),
@@ -42,6 +43,8 @@ const {
   // task 24.1: the M3 presenter modes (poll_results / word_cloud).
   readPresenterActivePoll: vi.fn(),
   readPresenterWordCloud: vi.fn(),
+  // task 34.3: the M4 ai_themes mode fetches theme insights via the AI client.
+  runThemeInsights: vi.fn(),
 }));
 
 vi.mock('../lib/eventLookup', () => ({
@@ -132,6 +135,16 @@ vi.mock('../lib/presenter', () => ({
     ].includes(v),
 }));
 
+// task 34.3: `./screens` now imports `../lib/aiClient` (for the presenter
+// `ai_themes` mode + the moderation-queue categorisation). Constructing the
+// real client throws unless VITE_SUPABASE_* is set, so stub the surface the
+// screen touches. `runThemeInsights` delegates to the hoisted mock (defaults in
+// beforeEach) so importing the screen stays env/network-free.
+vi.mock('../lib/aiClient', () => ({
+  runThemeInsights: (id: string) => runThemeInsights(id),
+  AiClientError: class AiClientError extends Error {},
+}));
+
 import { PresenterView } from './screens';
 
 function renderPresenter(ref = 'demo-event'): void {
@@ -159,6 +172,18 @@ beforeEach(() => {
   // overrides them.
   readPresenterActivePoll.mockResolvedValue(null);
   readPresenterWordCloud.mockResolvedValue({ prompt: null, responses: [] });
+  // task 34.3 default: an empty (has_data:false) theme-insights result unless a
+  // test overrides it. The mode is available; the panel shows the empty state.
+  runThemeInsights.mockResolvedValue({
+    available: true,
+    insights: {
+      top_themes: [],
+      emerging_concerns: [],
+      frequent_topics: [],
+      notable_high_vote_questions: [],
+      has_data: false,
+    },
+  });
 });
 
 describe('PresenterView', () => {
@@ -291,7 +316,7 @@ describe('PresenterView', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('falls back to a waiting screen for the ai_themes mode (M4+)', async () => {
+  it('renders the AI theme-insights panel for the ai_themes mode (M4, task 34.3)', async () => {
     findEventByRef.mockResolvedValue({
       ...LIVE_EVENT,
       active_presenter_mode: 'ai_themes',
@@ -299,8 +324,14 @@ describe('PresenterView', () => {
 
     renderPresenter();
 
+    // The labelled AI-themes region renders (not the waiting fallback); with the
+    // default has_data:false result the empty-state notice is shown.
     expect(
-      await screen.findByTestId('presenter-waiting-mode'),
+      await screen.findByTestId('presenter-ai-themes'),
     ).toBeInTheDocument();
+    expect(screen.getByTestId('presenter-ai-themes-empty')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('presenter-waiting-mode'),
+    ).not.toBeInTheDocument();
   });
 });

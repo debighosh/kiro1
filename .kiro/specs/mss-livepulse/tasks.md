@@ -971,31 +971,504 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
 
 ---
 
-## Milestone 4: AI Features (placeholder — to be expanded when this milestone begins)
+## Milestone 4: AI Features
 
-- [~] 26. Milestone 4: AI Features — expand into detailed tasks when the milestone begins
-  - Scope: the single server-side AI Gateway Edge Function; write-only credential storage
-    (managed secret reference preferred, AEAD fallback, XOR rule); endpoint allowlist / SSRF
-    protection; connection test; OpenAI-compatible adapter + custom-adapter extension point;
-    server-side structured-output (Zod) validation with bounded retries; question categorisation
-    (fixed 8 categories); prompt-based clustering; grounded theme insights; and the Markdown
-    end-of-event summary. Adds `ai_provider_settings` and `ai_jobs` tables with their RLS rules.
-  - Primary requirements: **Req 11–20** (AI config, credential protection, SSRF, structured
-    output, categorisation, clustering, theme insights, summary, failure/degraded mode, privacy).
-  - Correctness properties to implement here: Properties 12, 13 (credentials), 14 (schema
-    validation), 15 (AI failure never blocks core flow), 16 (SSRF allowlist), 17 (categorisation
-    preserves text), 18 (cluster vote total), 19 (payloads exclude identifiers).
-  - Note: any `ai_provider_settings` credential-schema groundwork touched earlier must uphold
-    Properties 12/13 (no credential in read APIs/logs; XOR storage).
-  - Implementation note (Deno SSRF & TLS): the AI Gateway SSRF resolution + allowlist check must validate the resolved destination IP for the allow/deny decision WITHOUT breaking HTTPS SNI or TLS certificate verification — the outbound fetch connects using the original hostname (respecting tls_verify_required), pinning the validated IP to the connection to close the DNS-rebinding gap. See design 'SSRF protection'. _Requirements: 13.7, 13.8, 13.12_.
-  - Implementation note (AI enabled vs. credential check): server-side business logic must validate that when ai_enabled = true and auth_type != 'none', a valid secret_reference or encrypted_credential is present; if neither is present, treat AI as effectively unconfigured and return the degraded 'AI unavailable' state instead of making an unauthenticated call, and surface in the UI that a credential is required. See design 'AI enablement precondition'. _Requirements: 11.1, 11.9, 12.3, 12.5, 12.6, 19.1_.
-  - _Requirements: 11, 12, 13, 14, 15, 16, 17, 18, 19, 20_
+Scope: the single server-side **AI Gateway** Edge Function (the only egress from the system to
+any AI provider); write-only credential storage (managed `secret_reference` preferred, AES-256-GCM
+AEAD fallback, XOR rule, plaintext never stored); endpoint allowlist / SSRF protection with
+TLS-preserving resolved-IP validation; a sanitised connection test; a provider-agnostic adapter
+layer with a first-class `openai_compatible` chat-completions adapter and a documented
+`custom_adapter` extension point; server-side structured-output (Zod) validation with bounded
+retries; question categorisation into the fixed 8 categories; prompt-based clustering; grounded
+theme insights; the Markdown end-of-event summary (calculated-data vs AI-interpretation
+separation); and the failure/degraded mode that keeps the entire core flow functional. Adds the
+`ai_provider_settings`, `ai_jobs`, and `question_clusters` tables (and the deferred
+`questions.cluster_id → question_clusters(id)` FK) plus their RLS rules, and the admin AI UI
+(settings/config + connection test, moderation-queue categorisation integration, presenter
+`ai_themes` mode, and summary generation/display).
+
+Primary requirements: **Req 11–20** (AI config, credential protection, SSRF, structured output,
+categorisation, clustering, theme insights, summary, failure/degraded mode, privacy), plus the
+admin-only authorisation from **Req 10.1, 20.4** and the write-only secret handling from
+**Req 21.8**.
+
+Correctness properties implemented here: Properties 12, 13 (credentials — no credential in read
+APIs/logs, XOR storage, write-only), 14 (structured-output schema validation with bounded
+retries), 15 (AI failure never blocks the core flow), 16 (SSRF allowlist), 17 (categorisation
+preserves original question text byte-for-byte), 18 (cluster vote total = sum of member votes),
+and 19 (outbound AI payloads exclude participant identifiers).
+
+**Implementation note (sandbox realities, same as Milestones 2/3):** the sandbox has no
+Postgres/Deno/`psql`/supabase CLI, so live RLS/RPC integration tests and the Deno/Edge-Function
+integration tests are env-gated (`skipIf` on `TEST_SUPABASE_*` env vars / the AI Gateway's own
+integration harness) and the durable guarantees (XOR credential storage, no-secret reads, SSRF
+allow/deny, structured-output validation, categorisation text preservation, computed cluster vote
+totals) are locked down by the static schema guard (`src/db/migrations.test.ts`, extended per task
+26.4) plus pure in-memory rule models exercised by property tests. The AI Gateway is
+Deno/Edge-Function code under `supabase/functions/` (excluded from the SPA `tsc` build + ESLint,
+like the existing `create-event` / `moderate-question` / `transition-event-status` functions), so
+its logic that CAN be unit-tested in Node — SSRF IP-range checks, credential XOR/AEAD rules,
+structured-output Zod validation, and payload participant-identifier exclusion — is factored into
+pure, Node-testable modules where practical, mirroring how M2/M3 factored `qaRules.ts` /
+`wordcloud.ts`. New migration filenames use byte-lexicographic ordering and MUST sort AFTER the
+latest Milestone 3 migration `20260101000029_poll_broadcast.sql` — i.e. use `20260101000030_*` and
+upward. AI egress and all credential/config writes are server-mediated (the AI Gateway / a
+service-role AI Config Edge Function) with NO client write RLS policies; credentials are
+write-only. _Requirements: 21.6, 21.8, 26.1_.
+
+- [x] 26. Add the AI data model migrations (ai_provider_settings, ai_jobs, question_clusters)
+  - [x] 26.1 Add the AI enums and the `ai_provider_settings` table migration
+    - Create migration `20260101000030_ai_provider_settings.sql` (timestamp sorts AFTER
+      `20260101000029_poll_broadcast.sql`); add enums `provider_type ('openai_compatible',
+      'custom_adapter')`, `ai_auth_type ('bearer','api_key_header','none')`, `ai_job_type
+      ('categorisation','clustering','theme_insights','summary','connection_test')`, and
+      `ai_job_status ('pending','running','succeeded','failed')`; create `ai_provider_settings`
+      (single active global config) with `id` (uuid PK), `is_active` (boolean NOT NULL default
+      true), `ai_enabled` (boolean NOT NULL default false), `display_name` (text NOT NULL, CHECK
+      `char_length` 1–100), `provider_type`, `base_url` (text NOT NULL, CHECK 1–2048, absolute
+      URL), `chat_completions_path` (text NOT NULL, CHECK 1–512), `auth_type`,
+      `api_key_header_name` (text NULL, CHECK 1–100), `model_id` (text NOT NULL, CHECK 1–200),
+      `temperature` (numeric(3,2) NOT NULL, CHECK 0.0–2.0), `max_output_tokens` (integer NOT NULL,
+      CHECK 1–128000), `request_timeout_seconds` (integer NOT NULL, CHECK 1–300),
+      `tls_verify_required` (boolean NOT NULL default true), `secret_reference` (text NULL),
+      `encrypted_credential` (bytea NULL), `credential_state` (text GENERATED —
+      `'configured'`/`'not_configured'`), `created_at`/`updated_at` (timestamptz NOT NULL default
+      `now()`); add the partial unique index `ON ai_provider_settings(is_active) WHERE is_active`
+      (at most one active config), the **XOR CHECK
+      `(num_nonnulls(secret_reference, encrypted_credential) <= 1)`** (never both — Req 12.6), and
+      attach the existing `set_updated_at()` trigger; the plaintext credential is NEVER stored
+      (Req 12.4)
+    - _Requirements: 11.1, 11.5, 11.7, 11.8, 11.9, 12.4, 12.6, 13.12, 19.1_
+    - _Design: Data Models (`ai_provider_settings` table; Enumerated types `provider_type`,
+      `ai_auth_type`, `ai_job_type`, `ai_job_status`; partial unique index; XOR CHECK)_
+
+  - [x] 26.2 Add the `ai_jobs` audit-log table migration
+    - Create migration `20260101000031_ai_jobs.sql`; create `ai_jobs` with `id` (uuid PK),
+      `event_id` (uuid NULL, FK → `events(id)` ON DELETE CASCADE), `job_type` (`ai_job_type` NOT
+      NULL), `status` (`ai_job_status` NOT NULL), `model_id` (text NULL), `started_at` (timestamptz
+      NOT NULL), `ended_at` (timestamptz NULL), `attempt_count` (integer NOT NULL default 0),
+      `sanitised_error` (text NULL); add `idx_ai_jobs_event` on `event_id`; document at the schema
+      level that `ai_jobs` NEVER stores credentials or full prompt text (Req 12.9, 20.7)
+    - _Requirements: 14.6, 19.3, 20.6, 20.7, 12.9_
+    - _Design: Data Models (`ai_jobs` table)_
+
+  - [x] 26.3 Add the `question_clusters` table migration and the deferred `questions.cluster_id` FK
+    - Create migration `20260101000032_question_clusters.sql`; create `question_clusters` with `id`
+      (uuid PK), `event_id` (uuid NOT NULL, FK → `events(id)` ON DELETE CASCADE), `label` (text NOT
+      NULL, CHECK `char_length` 1–100), `created_at`/`updated_at` (timestamptz NOT NULL default
+      `now()`); add `idx_question_clusters_event` on `event_id` and attach `set_updated_at()`; then
+      **add the deferred FK** `questions.cluster_id → question_clusters(id) ON DELETE SET NULL`
+      (the M2 `questions` migration deliberately declared `cluster_id` as a plain nullable `uuid`
+      with NO FK because `question_clusters` is a Milestone-4 table — see the Notes decision — so
+      this migration introduces the FK now, leaving questions intact on cluster deletion)
+    - _Requirements: 16.1, 16.4, 16.7, 16.9, 16.10, 3.4_
+    - _Design: Data Models (`question_clusters` table; single-membership via `questions.cluster_id`
+      FK ON DELETE SET NULL); Notes decision on the deferred cluster FK_
+
+  - [x]* 26.4 Extend the from-scratch schema/migration static guard for the AI tables
+    - Extend the static migration test (`src/db/migrations.test.ts`, mirroring the M3 task 19.5
+      approach) to assert the new migrations: define the `provider_type`, `ai_auth_type`,
+      `ai_job_type`, and `ai_job_status` enum values; create `ai_provider_settings` with the
+      `display_name` 1–100, `base_url` 1–2048, `chat_completions_path` 1–512, `model_id` 1–200,
+      `temperature` 0.0–2.0, `max_output_tokens` 1–128000, and `request_timeout_seconds` 1–300
+      CHECKs, the `tls_verify_required` default true, the `WHERE is_active` partial unique index,
+      the XOR CHECK `num_nonnulls(secret_reference, encrypted_credential) <= 1`, and the GENERATED
+      `credential_state`; create `ai_jobs` with the `ai_job_type`/`ai_job_status` columns and the
+      CASCADE FK; create `question_clusters` with the `label` 1–100 CHECK and CASCADE FK, and the
+      `questions.cluster_id → question_clusters(id) ON DELETE SET NULL` FK; and that all three
+      filenames sort after `…000029` so the schema still builds from a fresh database
+    - _Requirements: 11.1, 11.7, 12.4, 12.6, 16.1, 16.4, 26.1_
+    - _Design: Data Models; Migrations and seed data_
+
+- [x] 27. Configure RLS for the AI tables
+  - [x] 27.1 Enable RLS and add the no-secret read policy for `ai_provider_settings`
+    - Create migration `20260101000033_ai_provider_settings_rls.sql`; enable RLS (default deny) on
+      `ai_provider_settings`; add NO anonymous access at all; expose authenticated admin read of
+      **non-secret columns ONLY** via a column-restricted view / `SECURITY DEFINER` read function
+      that whitelists non-secret columns, and do NOT grant `SELECT` on `secret_reference` /
+      `encrypted_credential` (nor any resolved secret) to the `authenticated` role — these are
+      NEVER selectable by any client (Req 12.8, 12.10, 21.8); add NO client `INSERT`/`UPDATE`/
+      `DELETE` policy — all config/secret writes occur only inside the service-role AI Config /
+      AI Gateway Edge Functions (task 28.2 / task 29.1)
+    - _Requirements: 12.8, 12.10, 21.3, 21.4, 21.8, 21.6_
+    - _Design: RLS Design (`ai_provider_settings` — no anonymous access, non-secret columns only via
+      column-restricted view / SECURITY DEFINER read fn)_
+
+  - [x] 27.2 Enable RLS and add read policies for `ai_jobs` and `question_clusters`
+    - Create migration `20260101000034_ai_jobs_clusters_rls.sql`; enable RLS (default deny) on
+      `ai_jobs` and `question_clusters`; add an authenticated admin `SELECT` policy scoped to the
+      admin's own event scope; add NO anonymous access; add NO client write policy — `ai_jobs`
+      rows and cluster create/dissolve are written only via the service-role AI Gateway
+      (tasks 29.1, 31.1)
+    - _Requirements: 20.6, 16.10, 21.3, 21.4, 21.6_
+    - _Design: RLS Design (`ai_jobs`, `question_clusters` — authenticated read for own scope, no
+      anonymous access, writes service-role only)_
+
+  - [x]* 27.3 Write env-gated RLS integration tests for the AI tables
+    - Mirroring `src/db/rls.questions.test.ts` (skip cleanly without `TEST_SUPABASE_*`): assert
+      anonymous access to `ai_provider_settings`, `ai_jobs`, and `question_clusters` is denied
+      entirely; assert an authenticated admin read of `ai_provider_settings` returns non-secret
+      columns and that `secret_reference` / `encrypted_credential` are NOT selectable by any client
+      (the whitelisted read path never exposes them); assert authenticated admin can read
+      `ai_jobs`/`question_clusters` for their own scope; assert client `INSERT`/`UPDATE` on all
+      three tables is rejected (writes are service-role only)
+    - _Requirements: 12.10, 21.8, 20.6, 16.10, 26.1_
+    - _Design: RLS Design (`ai_provider_settings`, `ai_jobs`, `question_clusters`)_
+
+- [x] 28. Implement the shared AI schemas and the server-side credential module
+  - [x] 28.1 Define the shared AI Zod schemas (provider settings input + structured-output contracts)
+    - Add shared Zod schemas (single source of truth, importable by the SPA and the Edge
+      Functions) for: (a) the AI provider settings input — `display_name` 1–100, `provider_type`,
+      `base_url` 1–2048 absolute URL, `chat_completions_path` 1–512, `auth_type`,
+      `api_key_header_name` 1–100 (required when `api_key_header`), `model_id` 1–200,
+      `temperature` 0.0–2.0, `max_output_tokens` 1–128000, `request_timeout_seconds` 1–300,
+      `tls_verify_required`, and the write-only `credential` 1–8192 chars (Req 11.1, 11.5, 12.2);
+      and (b) the AI structured-output contracts — categorisation result, cluster result, theme
+      insights, and summary — used for server-side response validation (Req 14.2)
+    - _Requirements: 11.1, 11.5, 12.2, 14.1, 14.2_
+    - _Design: Error Handling (Validation errors — shared Zod schemas); Structured output
+      validation (same Zod schema server-side)_
+
+  - [x] 28.2 Implement the Edge-Function-only credential module (write-only, XOR, AEAD fallback)
+    - Add an Edge-Function-only credential module (never imported by the SPA) implementing the
+      write-only credential handling: prefer a managed **`secret_reference`**; use the AEAD
+      fallback = AES-256-GCM (Web/Node Crypto) with the key from the `AI_CREDENTIAL_ENCRYPTION_KEY`
+      deployment secret, storing only ciphertext in `encrypted_credential`; enforce the XOR rule
+      (never both `secret_reference` and `encrypted_credential`); NEVER store the plaintext; on a
+      resolve/decrypt failure abort with an error containing no plaintext or partial credential;
+      ensure credentials never appear in logs, errors, telemetry, exports, or `ai_jobs`
+      (Req 12.3–12.9); factor the pure XOR/AEAD rule logic into a Node-testable module for the
+      property tests in task 35
+    - _Requirements: 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9_
+    - _Design: Server-Side AI Gateway Design (Credential handling — secret_reference preferred,
+      AEAD fallback, XOR, plaintext never stored); Technology Stack (Crypto AEAD fallback)_
+
+  - [x]* 28.3 Write unit tests for the shared AI schemas and credential module rules
+    - Test the provider-settings schema boundaries (display_name 1–100, base_url 1–2048 absolute
+      URL, model_id 1–200, temperature 0.0–2.0, max_output_tokens 1–128000, request_timeout_seconds
+      1–300, api_key_header_name required only when `api_key_header`, credential 1–8192) with
+      field-specific rejection; test the credential module's XOR enforcement (never both), that the
+      plaintext is never returned/stored, and that a resolve/decrypt failure produces an error
+      containing no plaintext
+    - _Requirements: 11.1, 11.5, 12.2, 12.4, 12.6, 12.8, 26.1_
+    - _Design: Error Handling; Server-Side AI Gateway Design (Credential handling)_
+
+- [x] 29. Implement the AI Gateway Edge Function (single server-side egress)
+  - [x] 29.1 Implement the AI Gateway core (auth, enablement precondition, credential resolve, logging)
+    - Add the `supabase/functions/ai-gateway` Edge Function (service role, reusing the existing
+      `_shared` JWT-verification pattern from `moderate-question`): verify the caller is an
+      Administrator and reject non-admins with an insufficient-privileges error (Req 20.4); enforce
+      the **AI enablement precondition** — when `ai_enabled = true` AND `auth_type != 'none'`,
+      require a `secret_reference` OR `encrypted_credential`; if neither is present, treat AI as
+      effectively unconfigured and return the degraded 'AI unavailable' / not-configured state
+      WITHOUT making an unauthenticated call (Req 11.1, 11.9, 12.3, 12.5, 12.6, 19.1); resolve the
+      credential in-process immediately before use and discard the plaintext afterwards (Req 12.7);
+      build a minimal payload (question text ≤10,000 chars + aggregate metadata only, NO participant
+      identifiers) (Req 20.1, 20.3); enforce a hard timeout using the admin-configured
+      `request_timeout_seconds` (default/cap ≤30 s) (Req 14.5, 19.1); and log each operation to
+      `ai_jobs` (type, status, timestamps, model id, sanitised error, attempt count) WITHOUT
+      credentials or full prompt text (Req 20.6, 20.7)
+    - _Requirements: 11.1, 11.9, 12.3, 12.5, 12.6, 12.7, 14.5, 19.1, 20.1, 20.3, 20.4, 20.6, 20.7_
+    - _Design: Server-Side AI Gateway Design (Responsibilities; AI enablement precondition; AI job
+      sequence); Architecture (single AI egress)_
+
+  - [x] 29.2 Implement the SSRF protection with TLS-preserving resolved-IP validation
+    - Factor a pure, Node-testable SSRF module: accept only `https`/`http` schemes (reject others);
+      resolve the destination address and BLOCK by default link-local/metadata (`169.254.0.0/16`
+      incl. `169.254.169.254`), loopback (`127.0.0.0/8`, `::1`), and private ranges
+      (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`); permit private/on-prem ONLY if
+      the resolved destination is in the deployment `AI_ENDPOINT_ALLOWLIST`; reject a
+      non-allowlisted destination WITHOUT sending the request (disallowed-destination error). Wire
+      the module into the Gateway with **TLS-preserving SSRF resolution** — validate the RESOLVED
+      IP for the allow/deny decision WITHOUT breaking HTTPS SNI or certificate-hostname
+      verification, pinning the validated IP to the connection while preserving the SNI hostname
+      (respecting `tls_verify_required`) to close the DNS-rebinding gap; never return provider
+      headers, credentials, or raw diagnostics to the browser (Req 13.1, 13.10)
+    - _Requirements: 13.4, 13.6, 13.7, 13.8, 13.9, 13.10, 13.12, 13.1_
+    - _Design: Server-Side AI Gateway Design (SSRF protection; TLS-preserving SSRF resolution)_
+
+  - [x] 29.3 Implement the provider adapter layer (openai_compatible + custom_adapter extension point)
+    - Add a provider-agnostic adapter interface with a first-class `openai_compatible`
+      chat-completions adapter and a documented `custom_adapter` extension point; request native
+      JSON mode when the provider supports it, otherwise request JSON in-prompt and extract
+      candidate JSON server-side (Req 14.1, 14.3); the adapter normalises provider differences
+      behind one interface and constructs the chat-completions call from the resolved config
+    - _Requirements: 11.3, 16.1, 14.1, 14.3_
+    - _Design: Server-Side AI Gateway Design (provider-agnostic adapter; openai_compatible adapter;
+      custom_adapter extension point)_
+
+  - [x] 29.4 Implement server-side structured-output validation with bounded retries
+    - Factor a pure, Node-testable validation step that validates every provider response against
+      the shared Zod contract (task 28.1) server-side BEFORE storing/displaying; on validation
+      failure (or no extractable candidate JSON) reject without storing, leave prior data
+      unchanged, and return a recoverable error, retrying up to 2 additional attempts and recording
+      `attempt_count` (Req 14.2, 14.3, 14.4, 14.6, 14.7); render nothing as executable HTML/script
+      — all AI-produced text is plain text (Req 14.8)
+    - _Requirements: 14.2, 14.3, 14.4, 14.6, 14.7, 14.8_
+    - _Design: Server-Side AI Gateway Design (Structured output validation)_
+
+  - [x] 29.5 Implement the connection-test operation (sanitised results, dual-check compatibility)
+    - Implement the `connection_test` job type: server-side send a minimal ≤256-char non-sensitive
+      prompt and verify a non-empty usable response; return only sanitised results (outcome, HTTP
+      status category 2xx/3xx/4xx/5xx, model id, round-trip ms, ISO 8601 UTC timestamp) and on
+      failure a sanitised category (invalid URL scheme, timeout, disallowed destination, connection
+      error, invalid response) with NO persisted config change (Req 13.1–13.5); report compatibility
+      as "established" ONLY when BOTH the connection test AND a representative structured-output test
+      succeed (Req 13.11)
+    - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.11, 25.7_
+    - _Design: Server-Side AI Gateway Design (Connection test)_
+
+  - [x]* 29.6 Write unit tests for the Gateway core, adapter, validation, and connection test
+    - Test admin-only authorisation (non-admin rejected); the AI enablement precondition (ai_enabled
+      + auth_type != none + no credential → degraded 'AI unavailable' with no outbound call); the
+      minimal payload excludes participant identifiers; the timeout uses the admin-configured
+      `request_timeout_seconds`; the openai_compatible adapter constructs the chat-completions call
+      and falls back to in-prompt JSON extraction; structured-output validation rejects malformed
+      responses leaving prior data unchanged and retries at most twice; the connection test returns
+      only sanitised fields and reports compatibility only on the dual success
+    - _Requirements: 11.9, 14.3, 14.4, 14.6, 19.1, 20.4, 20.1, 13.11, 26.1_
+    - _Design: Server-Side AI Gateway Design (Responsibilities; adapter; validation; connection test)_
+
+  - [x]* 29.7 Write a property test for SSRF allowlist enforcement (Property 16)
+    - **Property 16: SSRF allowlist enforcement** — fast-check generates random URLs and resolved
+      IPs spanning public, link-local (`169.254.0.0/16`), loopback (`127.0.0.0/8`, `::1`), and
+      private ranges (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), with/without allowlist
+      entries; assert the "send" decision is true **iff** the scheme is `http`/`https` AND the
+      resolved destination is public or allowlisted, and that no blocked request is dispatched. Tag
+      `Feature: mss-livepulse, Property 16: ...`. **Validates: Requirements 13.6, 13.7, 13.8, 13.9**
+    - Drive the pure SSRF module (task 29.2)
+    - _Requirements: 13.6, 13.7, 13.8, 13.9, 26.1_
+    - _Design: Correctness Properties (Property 16); Server-Side AI Gateway Design (SSRF protection)_
+
+- [x] 30. Implement question categorisation (Req 15)
+  - [x] 30.1 Implement the categorisation AI Gateway job
+    - Add the `categorisation` job type that classifies each approved question into exactly one of
+      the fixed 8 categories `{Technology, Governance, Security, Operations, Workforce, Compliance,
+      Strategy, Other}` in batches ≤100 within ≤30 s (Req 15.1); validate each returned category by
+      exact, case-sensitive match and reject the WHOLE response if any category is invalid
+      (Req 15.3, 15.4); store the category + optional confidence (numeric 0.00–1.00, or absent) on
+      the question, preserving the original `text` byte-for-byte (Req 15.5, 15.6, 15.9); exclude
+      hidden questions unless explicitly requested (Req 15.10); implement the moderator override so
+      it must be one of the 8 categories, records `ai_prior_category`, and retains the prior
+      assignment on an invalid override (Req 15.7, 15.8)
+    - _Requirements: 15.1, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10_
+    - _Design: Server-Side AI Gateway Design (AI features — Categorisation); Data Models
+      (`questions.ai_category`, `ai_category_confidence`, `ai_prior_category`)_
+
+  - [x]* 30.2 Write a property test for categorisation text preservation (Property 17)
+    - **Property 17: Categorisation preserves original question text** — generate questions; run
+      categorisation (mocked provider) and moderator overrides; assert the stored question `text`
+      is byte-for-byte identical before and after and only category metadata changes. Tag
+      `Feature: mss-livepulse, Property 17: ...`. **Validates: Requirements 15.9**
+    - _Requirements: 15.9, 26.1_
+    - _Design: Correctness Properties (Property 17)_
+
+  - [x]* 30.3 Write unit tests for categorisation validation and override rules
+    - Test exact case-sensitive category validation (a single invalid category rejects the whole
+      response, no category stored); confidence stored 0.00–1.00 or absent; hidden questions
+      excluded unless explicitly requested; moderator override rejected when not one of the 8 and
+      the prior assignment retained; `ai_prior_category` recorded on override
+    - _Requirements: 15.3, 15.4, 15.5, 15.7, 15.8, 15.10, 26.1_
+    - _Design: Server-Side AI Gateway Design (AI features — Categorisation)_
+
+- [x] 31. Implement prompt-based clustering (Req 16)
+  - [x] 31.1 Implement the clustering AI Gateway job (prompt-based only)
+    - Add the `clustering` job type that performs PROMPT-BASED semantic grouping ONLY (no vector
+      embeddings / pairwise similarity): submit the approved-question set to the chat-completions
+      endpoint with a grouping prompt and validate the structured JSON clusters (each cluster
+      2–500 members, `label` 1–100) against the shared schema (Req 16.1); if <2 approved questions,
+      return zero clusters with an insufficient-data indication (Req 16.2); validate that every
+      returned question id belongs to the current event and otherwise reject the whole response
+      (Req 16.10); create clusters additively as `question_clusters` rows and set members'
+      `questions.cluster_id`, never deleting/merging originals (Req 16.4); dissolving a cluster
+      deletes the cluster row and sets its members' `cluster_id` NULL (Req 16.9); compute the
+      cluster vote total as the sum of member `vote_count` (never stored) (Req 16.5, 16.6)
+    - _Requirements: 16.1, 16.2, 16.4, 16.5, 16.6, 16.7, 16.9, 16.10_
+    - _Design: Server-Side AI Gateway Design (AI features — Clustering, prompt-based only); Data
+      Models (`question_clusters`; computed cluster vote total)_
+
+  - [x]* 31.2 Write a property test for the cluster vote total (Property 18)
+    - **Property 18: Cluster vote total equals sum of member votes** — generate clusters with
+      random member `vote_count`s; assert the computed total equals the arithmetic sum; mutate
+      membership (add/remove members) and assert the total equals the new sum, and that the total
+      is never stored. Tag `Feature: mss-livepulse, Property 18: ...`.
+      **Validates: Requirements 16.5, 16.6**
+    - Drive an in-memory cluster model
+    - _Requirements: 16.5, 16.6, 26.1_
+    - _Design: Correctness Properties (Property 18)_
+
+  - [x]* 31.3 Write unit tests for clustering validation and dissolution
+    - Test <2 approved questions → zero clusters + insufficient-data indication; a returned question
+      id not belonging to the current event rejects the whole response; cluster member-count 2–500
+      and `label` 1–100 boundaries; clusters are additive (originals not deleted/merged); dissolving
+      a cluster deletes the row and NULLs members' `cluster_id`
+    - _Requirements: 16.2, 16.4, 16.7, 16.9, 16.10, 26.1_
+    - _Design: Server-Side AI Gateway Design (AI features — Clustering)_
+
+- [x] 32. Implement grounded theme insights (Req 17)
+  - [x] 32.1 Implement the theme-insights AI Gateway job
+    - Add the `theme_insights` job type that generates ≤5 top themes, ≤5 emerging concerns, ≤10
+      frequent topics, and ≤5 notable high-vote questions within 10 s (Req 17.1); compute "notable
+      high-vote" as the top 10% of vote counts OR vote count ≥10 (Req 17.2); ground the output ONLY
+      in the selected event's data — the prompt instructs the model not to invent counts, votes, or
+      questions (Req 17.3, 17.4); for an empty event return an empty result set with a status
+      indication and no fabrication (Req 17.5); validate the response against the shared theme
+      schema before returning
+    - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5_
+    - _Design: Server-Side AI Gateway Design (AI features — Theme insights)_
+
+  - [x]* 32.2 Write unit tests for theme-insights bounds and grounding
+    - Test the caps (≤5 themes, ≤5 emerging concerns, ≤10 frequent topics, ≤5 notable questions);
+      the notable-high-vote threshold (top 10% OR ≥10); the empty-event case returns an empty result
+      + status indication with no fabricated content; schema validation rejects a malformed response
+    - _Requirements: 17.1, 17.2, 17.5, 26.1_
+    - _Design: Server-Side AI Gateway Design (AI features — Theme insights)_
+
+- [x] 33. Implement the end-of-event summary and the AI failure / degraded mode (Req 18, 19)
+  - [x] 33.1 Implement the end-of-event summary AI Gateway job (calculated vs AI-interpretation)
+    - Add the `summary` job type that produces a Markdown report in which ALL calculated data is
+      computed directly from the DB independent of the model under a "Calculated Data" heading, and
+      AI interpretation lives under a separate "AI Interpretation" heading with the AI executive
+      summary + follow-up actions prefixed "AI-Generated" (Req 18.1, 18.4, 18.5, 18.6); include top
+      questions ≤10 by descending votes, ties broken by earliest submission (Req 18.2); complete
+      within 30 s (Req 18.3); if AI is unavailable, produce all calculated sections plus a visible
+      notice that AI content could not be produced (Req 18.7)
+    - _Requirements: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7_
+    - _Design: Server-Side AI Gateway Design (AI features — End-of-event summary)_
+
+  - [x] 33.2 Implement the AI failure / degraded-mode handling across AI operations
+    - Ensure any AI failure (not configured, unreachable, auth failure, invalid response, or timeout
+      at the admin-configured `request_timeout_seconds`) keeps the ENTIRE core flow fully functional
+      with no AI-attributable error surfaced to the user, and that AI features fail independently
+      (Req 19.1); bound automatic retries to max 3 per operation with exponential backoff and then
+      stop until an admin manual retry that executes exactly one attempt reporting within 2 s
+      (Req 19.3, 19.4); never mutate/delete prior approved moderation decisions or valid AI results
+      and never persist partial/invalid output (Req 19.5, 19.6); no silent provider switching /
+      automatic failover (Req 19.7); the initiating AI control shows an "AI unavailable" indication
+      within 2 s without provider internals (Req 19.2)
+    - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5, 19.6, 19.7_
+    - _Design: Server-Side AI Gateway Design (Failure handling / degraded mode)_
+
+  - [x]* 33.3 Write a property test for AI failure never blocking the core flow (Property 15)
+    - **Property 15: AI failure never blocks the core flow** — parameterised injection of each AI
+      failure mode (not configured, unreachable, auth failure, invalid response, timeout at the
+      admin-configured timeout); run each core operation (Q&A, moderation, voting, polls, word
+      clouds, presenter controls, analytics, CSV export) and assert it completes successfully with
+      no AI-attributable error surfaced. Tag `Feature: mss-livepulse, Property 15: ...`.
+      **Validates: Requirements 19.1, 27.6**
+    - _Requirements: 19.1, 26.1_
+    - _Design: Correctness Properties (Property 15); Server-Side AI Gateway Design (degraded mode)_
+
+  - [x]* 33.4 Write unit tests for the summary structure and degraded-mode behaviour
+    - Test the summary's Calculated-Data vs AI-Interpretation heading separation and the
+      "AI-Generated" prefix; top-questions ≤10 ordering by descending votes with earliest-submission
+      tie-break; the AI-unavailable path emits all calculated sections + the visible AI-unavailable
+      notice; a failure leaves prior approved moderation/AI results unchanged and persists no
+      partial output; the "AI unavailable" indication surfaces without provider internals
+    - _Requirements: 18.2, 18.4, 18.7, 19.2, 19.5, 19.6, 26.1_
+    - _Design: Server-Side AI Gateway Design (End-of-event summary; degraded mode)_
+
+- [x] 34. Implement the admin AI UI (settings/config, moderation categorisation, presenter, summary)
+  - [x] 34.1 Build the AI settings/config screen with write-only credential entry and connection test
+    - Add an admin-only route (under `RequireAuth`) with the provider-config form validated by the
+      shared schema (task 28.1); implement write-only credential entry with **Replace/Remove**
+      requiring an authenticated session established or re-verified within 300 s and Remove
+      requiring explicit confirmation (Req 11.12, 11.13, 12.11); surface the `credential_state`
+      (configured/required); add a connection-test button that invokes the Gateway `connection_test`
+      (task 29.5) and surfaces the sanitised results within 30 s (Req 13.1, 25.7); show a visible
+      notice that event text will be sent to the endpoint before any AI operation (Req 20.5); never
+      display any stored credential (write-only, Req 12.1, 12.10)
+    - _Requirements: 11.12, 11.13, 12.1, 12.10, 12.11, 13.1, 20.5, 25.7_
+    - _Design: Server-Side AI Gateway Design (Credential handling — Replace/Remove; Connection test);
+      Frontend Design (Protected-route strategy)_
+
+  - [x] 34.2 Integrate categorisation into the moderation queue (category filter + override)
+    - Extend the existing `ModerationQueue` (M2 task 16.2) with the AI category display, the
+      category filter, and a moderator override control that calls the categorisation override path
+      (task 30.1), constraining the override to the 8 categories and retaining the prior category on
+      an invalid selection; a "categorise" action triggers the categorisation job via the Gateway
+    - _Requirements: 15.7, 15.8, 3.11, 3.12, 24.7_
+    - _Design: Components (`ModerationQueue`); Server-Side AI Gateway Design (AI features —
+      Categorisation)_
+
+  - [x] 34.3 Add the presenter `ai_themes` display mode
+    - Extend the existing `PresenterView` (`/present/:eventRef`) with the `ai_themes` mode that
+      renders the theme-insights output (top themes, emerging concerns, frequent topics, notable
+      high-vote questions), projector-optimised and ARIA-labelled; render all AI text as plain text
+      (Req 14.8); switch to this mode via the moderator-selected `active_presenter_mode` within 2 s
+    - _Requirements: 7.4, 7.5, 17.1, 14.8_
+    - _Design: Data Models (`presenter_mode` value `ai_themes`); Server-Side AI Gateway Design (AI
+      features — Theme insights); Request/data flows (Presenter mode switching)_
+
+  - [x] 34.4 Build the end-of-event summary generation and display UI
+    - Add an admin-only summary view that triggers the summary job (task 33.1) and renders the
+      returned Markdown as plain text (no executable HTML — Req 14.8), showing the Calculated-Data
+      and AI-Interpretation sections and, when AI is unavailable, the calculated sections plus the
+      visible AI-unavailable notice (Req 18.7)
+    - _Requirements: 18.1, 18.4, 18.7, 14.8, 25.4_
+    - _Design: Server-Side AI Gateway Design (AI features — End-of-event summary); Frontend Design
+      (Protected-route strategy)_
+
+  - [x]* 34.5 Write unit tests for the admin AI UI
+    - Test the config form validation surfacing field errors; Replace/Remove gated by a
+      re-verified-within-300 s session and Remove requiring explicit confirmation; the connection
+      test surfaces only sanitised results; no credential value is ever rendered; the moderation
+      category filter/override behaviour; the presenter `ai_themes` mode renders theme output as
+      plain text; the summary view renders calculated + AI sections and the AI-unavailable notice
+    - _Requirements: 11.12, 11.13, 12.10, 13.1, 15.7, 18.7, 26.1_
+    - _Design: Components (`ModerationQueue`, `PresenterView`); Server-Side AI Gateway Design_
+
+- [x] 35. Write the credential-protection and privacy property tests (Properties 12, 13, 19)
+  - [x]* 35.1 Write property tests for credential protection (Properties 12, 13)
+    - **Property 12: Credential never present in any read API response or log** — generate random
+      AI provider configs; invoke every read API and capture emitted logs/telemetry/export lines;
+      assert none contain the plaintext credential, the `encrypted_credential` ciphertext, the
+      `secret_reference` target value, or any resolved secret. **Validates: Requirements 12.8, 12.9,
+      12.10, 21.8**
+    - **Property 13: Credential storage is exclusive (XOR)** — generate random save operations over
+      both the `secret_reference` path and the encryption-fallback path; assert the XOR CHECK holds
+      (`num_nonnulls(secret_reference, encrypted_credential) <= 1`) and no plaintext column
+      exists/holds a credential. **Validates: Requirements 12.4, 12.6**
+    - Tag each `Feature: mss-livepulse, Property N: ...`; drive the pure credential module
+      (task 28.2) and the whitelisted read path (task 27.1), env-gating any live-DB portion
+    - _Requirements: 12.4, 12.6, 12.8, 12.9, 12.10, 21.8, 26.1_
+    - _Design: Correctness Properties (Properties 12, 13); Server-Side AI Gateway Design (Credential
+      handling)_
+
+  - [x]* 35.2 Write a property test for AI payloads excluding participant identifiers (Property 19)
+    - **Property 19: AI payloads exclude participant identifiers** — generate event data including
+      identifier-shaped fields (name, email, phone, user id, IP); build the outbound Gateway payload
+      and assert it contains no participant identifier, and that if an identifier is detected prior
+      to transmission the request is blocked and no call is made. Tag
+      `Feature: mss-livepulse, Property 19: ...`. **Validates: Requirements 20.1, 20.2, 20.3**
+    - Drive the pure payload-builder / pre-transmission guard from the Gateway (task 29.1)
+    - _Requirements: 20.1, 20.2, 20.3, 26.1_
+    - _Design: Correctness Properties (Property 19); Server-Side AI Gateway Design (AI data handling
+      / privacy)_
+
+- [x] 36. Milestone 4 checkpoint — verify AI Features completeness
+  - [x] 36.1 Verify the Milestone 4 definition of done
+    - Confirm the `ai_provider_settings`/`ai_jobs`/`question_clusters` migrations + the deferred
+      `questions.cluster_id` FK + their RLS build from a fresh database (static guard extended, task
+      26.4); confirm NO credential (plaintext, `encrypted_credential`, `secret_reference`, or any
+      resolved secret) is selectable by any client or appears in `ai_jobs`/logs, and that the XOR +
+      write-only rules are enforced; confirm the SSRF allowlist blocks non-allowlisted / link-local /
+      loopback / private destinations WITHOUT sending while preserving TLS SNI/cert verification;
+      confirm structured-output validation rejects invalid responses without storing (prior data
+      unchanged) with bounded retries; confirm categorisation preserves the original question text
+      byte-for-byte and clustering is prompt-based with computed (never stored) cluster vote totals;
+      confirm theme insights + summary are grounded / calculated-vs-AI-separated; confirm ANY AI
+      failure leaves the core flow fully functional (degraded mode); and confirm `npm run build`,
+      `npm test`, `npm run lint`, and `npm run typecheck:test` all pass before proceeding to
+      Milestone 5. Ensure all tests pass, ask the user if questions arise.
+    - _Requirements: 12.6, 12.10, 13.8, 14.4, 15.9, 16.5, 19.1, 20.7, 21.8, 26.3_
+    - _Design: Data Models; RLS Design; Correctness Properties; Server-Side AI Gateway Design_
 
 ---
 
 ## Milestone 5: Export, Hardening, and Event Readiness (placeholder — to be expanded when this milestone begins)
 
-- [~] 27. Milestone 5: Export, Hardening, Event Readiness — expand into detailed tasks when the milestone begins
+- [~] 37. Milestone 5: Export, Hardening, Event Readiness — expand into detailed tasks when the milestone begins
   - Scope: CSV exports (questions, polls, word cloud) and the Markdown end-of-event summary
     (calculated-data vs AI-interpretation separation); analytics dashboard; input
     validation/sanitisation, server-side rate limiting, and consistent error handling;
@@ -1010,8 +1483,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
 
 ## Notes
 
-- Milestones 1, 2, and 3 are fully detailed; Milestones 4–5 remain placeholders to be expanded
-  into detailed, checkbox-level tasks when each milestone begins.
+- Milestones 1, 2, 3, and 4 are fully detailed; Milestone 5 remains a placeholder to be expanded
+  into detailed, checkbox-level tasks when the milestone begins.
 - **Each milestone must be completed and verified before the next begins** (M1 → M2 → M3 → M4 →
   M5), per the product implementation plan.
 - Note: expanding Milestone 2 into an epic-level breakdown consumed top-level task numbers
@@ -1022,6 +1495,11 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
   Milestone 5 placeholders were therefore renumbered from 20/21 to 26/27 (their scope and
   requirement references are unchanged). Milestone 1 tasks (1–10) and Milestone 2 tasks (11–18)
   are not renumbered.
+- Note: expanding Milestone 4 into an epic-level breakdown consumed top-level task numbers
+  26–36 (starting at the number the M4 placeholder previously held, task 26); the Milestone 5
+  placeholder was therefore renumbered from 27 to 37 (its scope and requirement references are
+  unchanged). Milestone 1 tasks (1–10), Milestone 2 tasks (11–18), and Milestone 3 tasks (19–25)
+  are not renumbered.
 - Tasks marked with `*` are optional (tests: unit, property-based, RLS/integration) and can be
   skipped for a faster MVP; core implementation tasks are never optional.
 - Every task references specific requirement clauses for traceability and, where relevant, the
@@ -1030,7 +1508,8 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
   number); unit and RLS tests validate specific examples, boundaries, and access rules.
 - The Milestone 1 checkpoint (task 10) enforces the foundation definition of done before
   Milestone 2 starts; the Milestone 2 checkpoint (task 18) does the same before Milestone 3; the
-  Milestone 3 checkpoint (task 25) does the same before Milestone 4.
+  Milestone 3 checkpoint (task 25) does the same before Milestone 4; the Milestone 4 checkpoint
+  (task 36) does the same before Milestone 5.
 - Milestone 2 decision: `questions.cluster_id` is a plain nullable `uuid` (no FK yet) because
   the `question_clusters` table it references is introduced in Milestone 4; the deferred
   `FK → question_clusters(id) ON DELETE SET NULL` is added by the M4 clusters migration.
@@ -1074,7 +1553,19 @@ Edge Functions) with NO client write RLS policies. _Requirements: 21.6, 26.1_.
     { "id": 29, "tasks": ["23.1", "23.3", "24.1"] },
     { "id": 30, "tasks": ["23.2", "23.4", "24.2"] },
     { "id": 31, "tasks": ["23.5", "23.6", "24.3"] },
-    { "id": 32, "tasks": ["25.1"] }
+    { "id": 32, "tasks": ["25.1"] },
+
+    { "id": 33, "tasks": ["26.1", "26.2", "26.3"] },
+    { "id": 34, "tasks": ["26.4", "27.1", "27.2"] },
+    { "id": 35, "tasks": ["27.3", "28.1", "28.2"] },
+    { "id": 36, "tasks": ["28.3", "29.1"] },
+    { "id": 37, "tasks": ["29.2", "29.3", "29.4", "29.5"] },
+    { "id": 38, "tasks": ["29.6", "29.7", "30.1", "31.1", "32.1"] },
+    { "id": 39, "tasks": ["30.2", "30.3", "31.2", "31.3", "32.2", "33.1"] },
+    { "id": 40, "tasks": ["33.2", "33.3", "33.4"] },
+    { "id": 41, "tasks": ["34.1", "34.2", "34.3", "34.4"] },
+    { "id": 42, "tasks": ["34.5", "35.1", "35.2"] },
+    { "id": 43, "tasks": ["36.1"] }
   ]
 }
 ```
