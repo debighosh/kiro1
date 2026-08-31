@@ -519,3 +519,421 @@ describe('Milestone 2 schema / migrations (Q&A tables)', () => {
     });
   });
 });
+
+/**
+ * Task 19.5 — Milestone 3 (Polls & Word Cloud) schema / migration verification.
+ *
+ * WHAT THIS BLOCK ADDS
+ * --------------------
+ * This extends the static, source-level migration guard above to cover the
+ * Milestone 3 Polls & Word Cloud data model, using the SAME approach as the
+ * Milestone-1 and Milestone-2 assertions: it reads the actual migration SQL
+ * files that ship in the repo (whitespace-normalised via `normaliseSql`) and
+ * asserts, from scratch — WITHOUT a live database — that:
+ *   - the `poll_status` enum is defined with EXACTLY draft/open/closed, the
+ *     `poll_results_visibility` enum with EXACTLY show_always/hide_until_closed,
+ *     and the `wordcloud_status` enum with EXACTLY draft/open/closed;
+ *   - the `polls` table is created with the `char_length(question_text)
+ *     BETWEEN 1 AND 200` CHECK, the `display_order > 0` CHECK, the partial
+ *     UNIQUE index `one_open_poll_per_event ON polls(event_id) WHERE
+ *     status='open'`, the `event_id` FK → events(id) ON DELETE CASCADE, and
+ *     `idx_polls_event`;
+ *   - the `poll_options` table is created with the `char_length(text) BETWEEN
+ *     1 AND 100` CHECK, the `response_count >= 0` CHECK, the DEFERRABLE
+ *     INITIALLY DEFERRED constraint trigger enforcing 2–10 options per poll
+ *     (the `enforce_poll_option_count()` function / `trg_poll_options_enforce_count`
+ *     trigger with the numeric bounds 2 and 10), and `idx_poll_options_poll`;
+ *   - the `poll_responses` table enforces one response per participant per poll
+ *     via UNIQUE (participant_identifier, poll_id) and cascades from polls /
+ *     events / poll_options via ON DELETE CASCADE FKs;
+ *   - the `word_cloud_prompts` table is created with the
+ *     `char_length(prompt_text) BETWEEN 1 AND 200` CHECK, the
+ *     `max_words_per_response BETWEEN 1 AND 10` CHECK, and the partial UNIQUE
+ *     index `one_open_prompt_per_event ON word_cloud_prompts(event_id) WHERE
+ *     status='open'`;
+ *   - the `word_cloud_responses` table is created with the
+ *     `char_length(raw_text) BETWEEN 1 AND 50` CHECK, `is_hidden boolean NOT
+ *     NULL DEFAULT false`, `normalised_text` NOT NULL, UNIQUE
+ *     (participant_identifier, prompt_id), and cascade FKs to
+ *     word_cloud_prompts / events;
+ *   - RLS is ENABLED on polls, poll_options, poll_responses, word_cloud_prompts
+ *     and word_cloud_responses; the anon SELECT predicates exclude draft polls /
+ *     prompts (status IN ('open','closed')) and exclude hidden word-cloud
+ *     responses (is_hidden = false); and NO client INSERT/UPDATE/DELETE policy
+ *     is defined on poll_responses (server-mediated writes, mirroring the M2
+ *     question_votes reasoning);
+ *   - all six new migration file names sort AFTER 20260101000016_vote_broadcast.sql
+ *     (and in dependency order among themselves) so the schema still builds
+ *     cleanly from a fresh database.
+ *
+ * As with Milestone 1 and 2, a live-DB apply (real INSERTs exercising the
+ * CHECKs, the partial-unique indexes, the constraint trigger and the UNIQUE
+ * constraints) is DEFERRED TO CI, where a PostgreSQL service is available — no
+ * Postgres/psql/pg-mem can faithfully apply these migrations in this sandbox
+ * (see the Milestone-1 rationale above). This static block is the always-on
+ * regression guard: the assertions match the constraint SEMANTICS (the 1..200 /
+ * 1..100 / 1..50 bounds, the 1..10 words bound, the > 0 and >= 0 bounds, the
+ * WHERE status='open' partial predicate, the specific FK targets and cascade,
+ * the DEFERRABLE trigger and its 2/10 bounds, the is_hidden default and anon
+ * exclusions) rather than merely the words "CHECK"/"UNIQUE"/"POLICY", so a
+ * silent weakening fails the test here.
+ *
+ * Requirements: 5.1, 5.5, 5.7, 6.1, 6.5, 6.9, 23.3, 26.1
+ * Design: Data Models (`polls`, `poll_options`, `poll_responses`,
+ * `word_cloud_prompts`, `word_cloud_responses`); Migrations and seed data.
+ */
+const VOTE_BROADCAST_FILE = '20260101000016_vote_broadcast.sql';
+const POLLS_FILE = '20260101000017_polls.sql';
+const POLL_RESPONSES_FILE = '20260101000018_poll_responses.sql';
+const WORD_CLOUD_FILE = '20260101000019_word_cloud.sql';
+const POLLS_RLS_FILE = '20260101000020_polls_rls.sql';
+const POLL_RESPONSES_RLS_FILE = '20260101000021_poll_responses_rls.sql';
+const WORD_CLOUD_RLS_FILE = '20260101000022_word_cloud_rls.sql';
+
+describe('Milestone 3 schema / migrations (Polls & Word Cloud tables)', () => {
+  it('ships the M3 migration files ordered so the schema builds from scratch', () => {
+    for (const f of [
+      POLLS_FILE,
+      POLL_RESPONSES_FILE,
+      WORD_CLOUD_FILE,
+      POLLS_RLS_FILE,
+      POLL_RESPONSES_RLS_FILE,
+      WORD_CLOUD_RLS_FILE,
+    ]) {
+      expect(migrationFiles).toContain(f);
+    }
+
+    const idx = (f: string) => migrationFiles.indexOf(f);
+    // Every new M3 migration sorts AFTER the last Milestone-2 migration
+    // (…000016_vote_broadcast), so the foundation + Q&A tables/enums/helpers
+    // they build on already exist when the schema is applied from scratch.
+    for (const f of [
+      POLLS_FILE,
+      POLL_RESPONSES_FILE,
+      WORD_CLOUD_FILE,
+      POLLS_RLS_FILE,
+      POLL_RESPONSES_RLS_FILE,
+      WORD_CLOUD_RLS_FILE,
+    ]) {
+      expect(idx(VOTE_BROADCAST_FILE)).toBeLessThan(idx(f));
+    }
+
+    // polls (+ poll_options, appended to …017) is created before
+    // poll_responses, whose poll_id/option_id FKs target polls/poll_options.
+    expect(idx(POLLS_FILE)).toBeLessThan(idx(POLL_RESPONSES_FILE));
+    // The polls tables exist before their RLS migration references them.
+    expect(idx(POLLS_FILE)).toBeLessThan(idx(POLLS_RLS_FILE));
+    // poll_responses exists before its RLS migration.
+    expect(idx(POLL_RESPONSES_FILE)).toBeLessThan(idx(POLL_RESPONSES_RLS_FILE));
+    // The word-cloud tables exist before their RLS migration references them.
+    expect(idx(WORD_CLOUD_FILE)).toBeLessThan(idx(WORD_CLOUD_RLS_FILE));
+  });
+
+  describe('poll enumerated types', () => {
+    it('defines poll_status with exactly draft/open/closed', () => {
+      const sql = flat[POLLS_FILE];
+      const m = sql.match(/CREATE TYPE poll_status AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = ['draft', 'open', 'closed'];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+
+    it('defines poll_results_visibility with exactly show_always/hide_until_closed', () => {
+      const sql = flat[POLLS_FILE];
+      const m = sql.match(
+        /CREATE TYPE poll_results_visibility AS ENUM \(([^)]*)\)/i,
+      );
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = ['show_always', 'hide_until_closed'];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+
+    it('defines wordcloud_status with exactly draft/open/closed', () => {
+      const sql = flat[WORD_CLOUD_FILE];
+      const m = sql.match(/CREATE TYPE wordcloud_status AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = ['draft', 'open', 'closed'];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+  });
+
+  describe('polls table', () => {
+    it('creates the polls table', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?polls \(/i,
+      );
+    });
+
+    it('constrains question_text length to 1..200 characters', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(question_text\)\s+BETWEEN\s+1\s+AND\s+200\s*\)/i,
+      );
+    });
+
+    it('requires display_order to be strictly positive (> 0)', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CHECK\s*\(\s*display_order\s*>\s*0\s*\)/i,
+      );
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('declares the one_open_poll_per_event partial UNIQUE index WHERE status=open', () => {
+      // The partial predicate is the whole point: dropping it would allow
+      // multiple open polls per event, so it is asserted explicitly.
+      expect(flat[POLLS_FILE]).toMatch(
+        /CREATE UNIQUE INDEX (IF NOT EXISTS )?one_open_poll_per_event\s+ON polls \(event_id\)\s+WHERE status = 'open'/i,
+      );
+    });
+
+    it('creates idx_polls_event on (event_id)', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_polls_event ON polls \(event_id\)/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[POLLS_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+
+  describe('poll_options table', () => {
+    it('creates the poll_options table', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?poll_options \(/i,
+      );
+    });
+
+    it('constrains text length to 1..100 characters', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(text\)\s+BETWEEN\s+1\s+AND\s+100\s*\)/i,
+      );
+    });
+
+    it('requires response_count to be non-negative (>= 0)', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CHECK\s*\(\s*response_count\s*>=\s*0\s*\)/i,
+      );
+    });
+
+    it('references polls(id) via the poll_id FK with ON DELETE CASCADE', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /poll_id\s+uuid[^,]*REFERENCES\s+polls\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('creates idx_poll_options_poll on (poll_id)', () => {
+      expect(flat[POLLS_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_poll_options_poll ON poll_options \(poll_id\)/i,
+      );
+    });
+
+    it('enforces 2..10 options per poll via a DEFERRABLE constraint trigger', () => {
+      const sql = flat[POLLS_FILE];
+      // A plain CHECK cannot count sibling rows, so the 2–10 rule is a
+      // CONSTRAINT TRIGGER. Assert the function, the trigger, the DEFERRABLE
+      // INITIALLY DEFERRED clause, and that both numeric bounds (2 and 10)
+      // appear in the enforcement logic.
+      expect(sql).toMatch(
+        /CREATE (OR REPLACE )?FUNCTION enforce_poll_option_count\(\)/i,
+      );
+      expect(sql).toMatch(
+        /CREATE CONSTRAINT TRIGGER trg_poll_options_enforce_count/i,
+      );
+      expect(sql).toMatch(/DEFERRABLE INITIALLY DEFERRED/i);
+      // The lower/upper bounds of the count check (v_count < 2 OR v_count > 10).
+      expect(sql).toMatch(/<\s*2\b/);
+      expect(sql).toMatch(/>\s*10\b/);
+    });
+  });
+
+  describe('poll_responses table', () => {
+    it('creates the poll_responses table', () => {
+      expect(flat[POLL_RESPONSES_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?poll_responses \(/i,
+      );
+    });
+
+    it('enforces one response per participant per poll via UNIQUE (participant_identifier, poll_id)', () => {
+      expect(flat[POLL_RESPONSES_FILE]).toMatch(
+        /UNIQUE\s*\(\s*participant_identifier\s*,\s*poll_id\s*\)/i,
+      );
+    });
+
+    it('references polls(id) via the poll_id FK with ON DELETE CASCADE', () => {
+      expect(flat[POLL_RESPONSES_FILE]).toMatch(
+        /poll_id\s+uuid[^,]*REFERENCES\s+polls\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      expect(flat[POLL_RESPONSES_FILE]).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('references poll_options(id) via the option_id FK with ON DELETE CASCADE', () => {
+      expect(flat[POLL_RESPONSES_FILE]).toMatch(
+        /option_id\s+uuid[^,]*REFERENCES\s+poll_options\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[POLL_RESPONSES_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+
+  describe('word_cloud_prompts table', () => {
+    it('creates the word_cloud_prompts table', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?word_cloud_prompts \(/i,
+      );
+    });
+
+    it('constrains prompt_text length to 1..200 characters', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(prompt_text\)\s+BETWEEN\s+1\s+AND\s+200\s*\)/i,
+      );
+    });
+
+    it('constrains max_words_per_response to 1..10', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /CHECK\s*\(\s*max_words_per_response\s+BETWEEN\s+1\s+AND\s+10\s*\)/i,
+      );
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('declares the one_open_prompt_per_event partial UNIQUE index WHERE status=open', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /CREATE UNIQUE INDEX (IF NOT EXISTS )?one_open_prompt_per_event\s+ON word_cloud_prompts \(event_id\)\s+WHERE status = 'open'/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+
+  describe('word_cloud_responses table', () => {
+    it('creates the word_cloud_responses table', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?word_cloud_responses \(/i,
+      );
+    });
+
+    it('constrains raw_text length to 1..50 characters', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /CHECK\s*\(\s*char_length\(raw_text\)\s+BETWEEN\s+1\s+AND\s+50\s*\)/i,
+      );
+    });
+
+    it('defaults is_hidden to false (boolean NOT NULL DEFAULT false)', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /is_hidden\s+boolean\s+NOT NULL\s+DEFAULT\s+false/i,
+      );
+    });
+
+    it('requires normalised_text to be NOT NULL', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /normalised_text\s+text\s+NOT NULL/i,
+      );
+    });
+
+    it('enforces one response per participant per prompt via UNIQUE (participant_identifier, prompt_id)', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /UNIQUE\s*\(\s*participant_identifier\s*,\s*prompt_id\s*\)/i,
+      );
+    });
+
+    it('references word_cloud_prompts(id) via the prompt_id FK with ON DELETE CASCADE', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /prompt_id\s+uuid[^,]*REFERENCES\s+word_cloud_prompts\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[WORD_CLOUD_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+
+  describe('Milestone 3 RLS', () => {
+    it('enables RLS on polls and poll_options', () => {
+      const sql = flat[POLLS_RLS_FILE];
+      expect(sql).toMatch(/ALTER TABLE polls\s+ENABLE ROW LEVEL SECURITY/i);
+      expect(sql).toMatch(
+        /ALTER TABLE poll_options\s+ENABLE ROW LEVEL SECURITY/i,
+      );
+    });
+
+    it('enables RLS on poll_responses', () => {
+      expect(flat[POLL_RESPONSES_RLS_FILE]).toMatch(
+        /ALTER TABLE poll_responses\s+ENABLE ROW LEVEL SECURITY/i,
+      );
+    });
+
+    it('enables RLS on word_cloud_prompts and word_cloud_responses', () => {
+      const sql = flat[WORD_CLOUD_RLS_FILE];
+      expect(sql).toMatch(
+        /ALTER TABLE word_cloud_prompts\s+ENABLE ROW LEVEL SECURITY/i,
+      );
+      expect(sql).toMatch(
+        /ALTER TABLE word_cloud_responses\s+ENABLE ROW LEVEL SECURITY/i,
+      );
+    });
+
+    it('excludes draft polls from the anon SELECT predicate (status IN open/closed)', () => {
+      // The security-critical guarantee: draft polls never reach the audience.
+      expect(flat[POLLS_RLS_FILE]).toMatch(/status IN \('open', 'closed'\)/i);
+    });
+
+    it('excludes draft prompts from the anon word_cloud_prompts predicate', () => {
+      expect(flat[WORD_CLOUD_RLS_FILE]).toMatch(
+        /status IN \('open', 'closed'\)/i,
+      );
+    });
+
+    it('excludes hidden responses from the anon word_cloud_responses predicate (is_hidden = false)', () => {
+      expect(flat[WORD_CLOUD_RLS_FILE]).toMatch(/is_hidden = false/i);
+    });
+
+    it('defines NO client INSERT/UPDATE/DELETE policy on poll_responses (server-mediated writes)', () => {
+      // Mirrors the M2 question_votes reasoning: response writes flow through
+      // the SECURITY DEFINER upsert-replace RPC / service role, so there must
+      // be no client write policy on the table.
+      const sql = flat[POLL_RESPONSES_RLS_FILE];
+      expect(sql).not.toMatch(/CREATE POLICY[^;]*FOR INSERT/i);
+      expect(sql).not.toMatch(/CREATE POLICY[^;]*FOR UPDATE/i);
+      expect(sql).not.toMatch(/CREATE POLICY[^;]*FOR DELETE/i);
+    });
+  });
+});
