@@ -12,8 +12,8 @@
 //  lifecycle logging — is expressed as small, well-seamed units that the later
 //  Wave tasks slot into:
 //
-//    - 29.2  SSRF module (resolve + allowlist the destination IP)          → `preflightDestination` seam
-//    - 29.3  provider adapter (openai_compatible + custom_adapter)         → `callProvider` seam
+//    - 29.2  SSRF module (resolve + allowlist the destination IP) — DONE      → `preflightDestination` seam (see ./ssrf.ts)
+//    - 29.3  provider adapter (openai_compatible + custom_adapter) — DONE   → `callProvider` seam (see ./adapter.ts)
 //    - 29.4  structured-output validation + bounded retries               → wraps `callProvider`
 //    - 29.5  connection test                                              → `job_type = 'connection_test'`
 //    - 30.1/31.1/32.1/33.1  categorisation / clustering / theme / summary → `job_type` + inputs
@@ -25,9 +25,11 @@
 //  and the pending→running→succeeded/failed `ai_jobs` logging (with
 //  attempt_count, model_id, sanitised_error and NEVER credentials/full prompt).
 //
-//  What is a STUB seam for 29.3: `callProvider` throws `PROVIDER_NOT_IMPLEMENTED`.
-//  The job lifecycle still records the (failed) attempt exactly as it will for a
-//  real provider error, so the logging path is exercised end-to-end today.
+//  Completed in 29.3: the `callProvider` seam now dispatches to the provider
+//  adapter layer (`./adapter.ts`) — a first-class `openai_compatible` adapter
+//  plus a documented `custom_adapter` extension point — and performs the outbound
+//  chat-completions call through the SSRF-pinned fetch. Structured-output
+//  validation (the JSON-schema contract) is layered on next by task 29.4.
 //
 //  Because this is Deno code it is intentionally NOT part of the SPA `tsc -b`
 //  typecheck (tsconfig `include` is `src` only) nor the SPA ESLint run
@@ -35,8 +37,8 @@
 //  supabase import and the `npm:zod@4` import are resolved by the Supabase Edge
 //  Functions / Deno toolchain at deploy time.
 //
-//  Requirements traceability: 11.1, 11.9, 12.3, 12.5, 12.6, 12.7, 14.5, 19.1,
-//  20.1, 20.3, 20.6, 20.7.
+//  Requirements traceability: 11.1, 11.9, 12.3, 12.5, 12.6, 12.7, 13.1, 13.4,
+//  13.6, 13.7, 13.8, 13.9, 13.10, 13.12, 14.5, 19.1, 20.1, 20.3, 20.6, 20.7.
 //  Design references: Server-Side AI Gateway Design (Responsibilities; AI
 //  enablement precondition; AI job sequence; Failure handling / degraded mode;
 //  AI data handling / privacy).
@@ -48,6 +50,20 @@ import {
   CredentialResolutionError,
   resolveEncryptedCredential,
 } from '../_shared/aiCredential.ts';
+import {
+  DisallowedDestinationError,
+  createPinnedFetch,
+  type PreflightResult,
+  preflightDestination,
+} from './ssrf.ts';
+import { ProviderCallError, callChatCompletion } from './adapter.ts';
+import {
+  MAX_STRUCTURED_OUTPUT_ATTEMPTS,
+  type ValidationFailureReason,
+  isStructuredOutputJobType,
+  shouldRetryAfterValidationFailure,
+  validateStructuredOutput,
+} from './structuredOutput.ts';
 
 // -----------------------------------------------------------------------------
 // Request contract (job_type + event_id + inputs).
@@ -330,16 +346,28 @@ export async function withHardTimeout<T>(
 export type SanitisedErrorCode =
   | 'timeout'
   | 'credential_resolution_failed'
+  | 'disallowed_destination'
   | 'provider_not_implemented'
   | 'provider_error'
+  | 'invalid_ai_response'
   | 'internal_error';
 
 /** Stable, human-readable summaries — no secrets, no prompt, no raw diagnostics. */
 const SANITISED_ERROR_MESSAGE: Readonly<Record<SanitisedErrorCode, string>> = {
   timeout: 'AI request timed out.',
   credential_resolution_failed: 'AI credential could not be resolved.',
+  // SSRF denial (Req 13.9): a fixed category only — never the hostname, the
+  // resolved IP, or a raw diagnostic (Req 13.1, 13.10).
+  disallowed_destination: 'The AI destination is not allowed.',
   provider_not_implemented: 'AI provider call is not yet implemented.',
   provider_error: 'The AI provider returned an error.',
+  // Structured-output validation failure after bounded retries (Req 14.4, 14.6,
+  // 14.7): the provider responded but the output could not be validated against
+  // the shared schema (or no candidate JSON was extractable). A fixed,
+  // recoverable category — never the offending text, a schema path, or a raw
+  // diagnostic (Req 13.10, 20.7).
+  invalid_ai_response:
+    'The AI response could not be validated. Please try again.',
   internal_error: 'The AI operation could not be completed.',
 };
 
@@ -365,8 +393,16 @@ export function sanitiseError(err: unknown): {
     code = 'timeout';
   } else if (err instanceof CredentialResolutionError) {
     code = 'credential_resolution_failed';
+  } else if (err instanceof DisallowedDestinationError) {
+    // Req 13.9, 13.10 — collapse to the fixed disallowed-destination category.
+    code = 'disallowed_destination';
   } else if (err instanceof ProviderNotImplementedError) {
     code = 'provider_not_implemented';
+  } else if (err instanceof ProviderCallError) {
+    // Any adapter transport/shape failure (incl. custom-adapter-not-configured)
+    // collapses to the fixed provider-error category — never a raw diagnostic,
+    // provider header, body, or credential (Req 13.10, 20.7).
+    code = 'provider_error';
   } else {
     code = 'internal_error';
   }
@@ -545,13 +581,22 @@ export async function withResolvedCredential<T>(
 // -----------------------------------------------------------------------------
 // Provider call SEAM (task 29.3).
 //
-// This is the ONLY place an outbound provider request will originate. Task 29.3
-// replaces the body with the adapter dispatch (openai_compatible /
-// custom_adapter) that POSTs the minimal payload to `baseUrl + chatCompletionsPath`
-// under the SSRF-checked destination (29.2) with the resolved credential,
-// forwarding `signal` so the hard timeout can cancel it. For now it throws
-// {@link ProviderNotImplementedError}; the surrounding job lifecycle records the
-// failed attempt exactly as it will for a real provider error.
+// This is the ONLY place an outbound provider request originates. Task 29.3
+// fills it: it dispatches to the provider adapter layer (`./adapter.ts`) that
+// POSTs the minimal payload to `baseUrl + chatCompletionsPath` with the resolved
+// credential, forwarding `signal` so the hard timeout can cancel it. The
+// destination has ALREADY passed the SSRF preflight (task 29.2, see
+// `runSingleAttempt`); the outbound request is dialed through an SSRF-PINNED
+// `fetchImpl` (built via `createPinnedFetch` from ./ssrf.ts) so the connection is
+// pinned to the SSRF-validated IP while preserving the SNI hostname (Req 13.7,
+// 13.8, 13.12). The pinned fetch is threaded IN as a parameter — the preflight
+// that produced the validated IP happens in `runSingleAttempt`, so the seam
+// stays a pure "given a pinned fetch, perform the call" unit.
+//
+// The adapter returns ONLY the raw assistant text + a coarse status category +
+// round-trip ms; the structured-output/JSON-schema validation is task 29.4,
+// which wraps this call. Errors are collapsed to sanitised categories by
+// `sanitiseError` (a `ProviderCallError` → `provider_error`).
 // -----------------------------------------------------------------------------
 
 export interface ProviderCallResult {
@@ -561,16 +606,28 @@ export interface ProviderCallResult {
   readonly roundTripMs: number;
 }
 
-// deno-lint-ignore no-unused-vars
+/**
+ * Performs the outbound provider chat-completions call via the adapter layer.
+ *
+ * `fetchImpl` MUST be the SSRF-pinned fetch (see {@link createPinnedFetch}) built
+ * from the preflight-validated IP in {@link runSingleAttempt} — passing it in
+ * (rather than building it here) keeps the SSRF validation and the pinning that
+ * enforces it adjacent, and keeps this seam a thin dispatch to the adapter. The
+ * `signal` is the hard-timeout signal so an in-flight request is cancelled on
+ * timeout (Req 14.5). Kept legacy `ProviderNotImplementedError` export for any
+ * caller still asserting the pre-29.3 behaviour is gone — the seam is now real.
+ */
 export function callProvider(
-  _config: ActiveProviderConfig,
-  _payload: MinimalPayload,
-  _credential: string | undefined,
-  _signal: AbortSignal,
+  config: ActiveProviderConfig,
+  payload: MinimalPayload,
+  credential: string | undefined,
+  signal: AbortSignal,
+  fetchImpl: typeof fetch,
 ): Promise<ProviderCallResult> {
-  // TODO(task 29.3): dispatch to the provider adapter and perform the outbound
-  // chat-completions call. Until then this seam fails closed.
-  throw new ProviderNotImplementedError();
+  // Provider-agnostic dispatch: `./adapter.ts` resolves openai_compatible vs
+  // custom_adapter from `config.providerType` and constructs the call from the
+  // resolved config. No provider header/body/credential ever escapes it.
+  return callChatCompletion(config, payload, credential, fetchImpl, signal);
 }
 
 // -----------------------------------------------------------------------------
@@ -596,6 +653,41 @@ export type GatewayRunOutcome =
       readonly error: { code: SanitisedErrorCode; message: string };
     };
 
+/**
+ * Performs a SINGLE outbound provider call for an ALREADY-BUILT minimal payload
+ * through the full SSRF-preflight → pinned-fetch → resolved-credential →
+ * hard-timeout path — the exact same egress machinery {@link runSingleAttempt}
+ * uses, factored out so other operations (e.g. the connection test, task 29.5)
+ * can reuse it WITHOUT duplicating any SSRF / timeout / credential logic.
+ *
+ * It does NO `ai_jobs` recording and NO structured-output validation — it is a
+ * thin, pure-egress primitive. Callers own their own lifecycle logging and
+ * result interpretation. Any failure propagates as its ORIGINAL error class
+ * (GatewayTimeoutError / DisallowedDestinationError / CredentialResolutionError
+ * / ProviderCallError) so the caller can map it to whatever sanitised taxonomy
+ * it needs via {@link sanitiseError} or its own mapping.
+ */
+export function runPreflightedProviderCall(
+  config: ActiveProviderConfig,
+  payload: MinimalPayload,
+): Promise<ProviderCallResult> {
+  const timeoutMs = resolveTimeoutMs(config.requestTimeoutSeconds);
+  return (async () => {
+    const preflight: PreflightResult = await preflightDestination(
+      config.baseUrl + config.chatCompletionsPath,
+    );
+    const pinnedFetch = createPinnedFetch(
+      preflight.resolvedIps[0],
+      config.tlsVerifyRequired,
+    );
+    return withResolvedCredential(config, (credential) =>
+      withHardTimeout(timeoutMs, (signal) =>
+        callProvider(config, payload, credential, signal, pinnedFetch),
+      ),
+    );
+  })();
+}
+
 export async function runSingleAttempt(
   config: ActiveProviderConfig,
   request: GatewayRequest,
@@ -607,9 +699,35 @@ export async function runSingleAttempt(
   const timeoutMs = resolveTimeoutMs(config.requestTimeoutSeconds);
 
   try {
+    // -------------------------------------------------------------------------
+    // SSRF PREFLIGHT SEAM (task 29.2, Req 13.4, 13.6-13.9, 13.12).
+    //
+    // BEFORE resolving the credential or opening ANY outbound connection, we
+    // parse + scheme-check the destination, resolve it to the FULL set of A/AAAA
+    // records, and run the pure allow/deny decision. A denial throws
+    // `DisallowedDestinationError` here — no request is sent (Req 13.9) and the
+    // credential is never even resolved. On allow, the preflight returns the
+    // validated resolved IPs; we pick one and build an SSRF-PINNED fetch (via
+    // `createPinnedFetch`) that DIALS that validated IP while preserving the SNI
+    // hostname, so HTTPS cert-hostname verification still succeeds and the
+    // address dialed IS the address checked — closing the DNS-rebinding gap
+    // (Req 13.7, 13.8, 13.12). That pinned fetch is threaded into `callProvider`
+    // (the adapter dispatch, task 29.3).
+    // -------------------------------------------------------------------------
+    const preflight: PreflightResult = await preflightDestination(
+      config.baseUrl + config.chatCompletionsPath,
+    );
+    // Pin to the FIRST validated IP. `evaluateSsrfDestination` (inside the
+    // preflight) already fail-closed the ENTIRE resolved set, so every IP here is
+    // allow-listed/safe; the first is a fine deterministic choice.
+    const pinnedFetch = createPinnedFetch(
+      preflight.resolvedIps[0],
+      config.tlsVerifyRequired,
+    );
+
     const result = await withResolvedCredential(config, (credential) =>
       withHardTimeout(timeoutMs, (signal) =>
-        callProvider(config, payload, credential, signal),
+        callProvider(config, payload, credential, signal, pinnedFetch),
       ),
     );
     await recorder.markSucceeded(attemptCount, config.modelId);
@@ -619,4 +737,158 @@ export async function runSingleAttempt(
     await recorder.markFailed(attemptCount, error.message, config.modelId);
     return { ok: false, error };
   }
+}
+
+// -----------------------------------------------------------------------------
+// Structured-output validation + bounded retries (task 29.4, Req 14.2, 14.3,
+// 14.4, 14.6, 14.7, 14.8, 19.3).
+//
+// This wraps a SINGLE provider attempt with the server-side structured-output
+// validation step and the bounded-retry loop. The invariants it enforces:
+//
+//   - Validate EVERY provider response server-side against the shared Zod
+//     contract for the job type BEFORE anything is stored/displayed (Req 14.2).
+//     The candidate JSON was already best-effort extracted by the adapter
+//     (Req 14.3); here we JSON.parse + schema-validate it.
+//   - No extractable candidate JSON, invalid JSON, or a schema violation is a
+//     VALIDATION FAILURE (Req 14.7). On failure we DO NOT store and we retry —
+//     up to a total of {@link MAX_STRUCTURED_OUTPUT_ATTEMPTS} attempts (1 initial
+//     + up to 2 additional, Req 14.4, 14.6, 19.3), incrementing `attempt_count`
+//     each time.
+//   - If every attempt fails validation, we reject WITHOUT storing, leave prior
+//     data unchanged, and return a RECOVERABLE `invalid_ai_response` error with
+//     the FINAL attempt_count recorded in `ai_jobs` (Req 14.4, 14.6).
+//   - A transport/timeout/SSRF failure from the single attempt is surfaced as
+//     its own sanitised category (already recorded by `runSingleAttempt`); it is
+//     NOT retried here (the max-3 bound is for validation retries, and the
+//     single-attempt runner already logged the terminal failure).
+//   - Req 14.8: the validated data is INERT plain data. The Gateway returns it
+//     as data ONLY; it is NEVER emitted as executable HTML/script. The SPA
+//     render tasks (34.x) render every AI-produced string as plain text.
+//
+// `connection_test` has no structured contract (task 29.5); this runner is only
+// for the structured-output job types. A caller MUST NOT route a
+// `connection_test` here — it would fail closed as an unsupported job type.
+// -----------------------------------------------------------------------------
+
+/** A successful, schema-validated structured output plus the attempt count. */
+export interface ValidatedRunResult {
+  /** The parsed, typed, INERT structured output (plain data only, Req 14.8). */
+  readonly data: unknown;
+  /** The attempt on which validation succeeded (1-based). */
+  readonly attemptCount: number;
+}
+
+export type ValidatedRunOutcome =
+  | { readonly ok: true; readonly result: ValidatedRunResult }
+  | {
+      readonly ok: false;
+      readonly error: { code: SanitisedErrorCode; message: string };
+      /** The final attempt count reached (recorded in ai_jobs). */
+      readonly attemptCount: number;
+    };
+
+/**
+ * Runs the provider call for a STRUCTURED-OUTPUT job type with server-side
+ * schema validation and bounded retries (Req 14.2, 14.4, 14.6, 14.7, 19.3).
+ *
+ * Each attempt: {@link runSingleAttempt} performs the SSRF-preflighted,
+ * credential-resolved, hard-timeout provider call and records the attempt in
+ * `ai_jobs`. On a NON-validation failure (timeout / provider / SSRF) the terminal
+ * failure is already recorded and returned as-is. On a successful call the raw
+ * candidate text is validated against the job type's schema; a validation
+ * failure retries (up to the cap) and a final validation failure returns a
+ * recoverable `invalid_ai_response` with the final attempt_count recorded.
+ *
+ * The `recorder`'s `markSucceeded`/`markFailed` are re-issued with the FINAL
+ * attempt count so `ai_jobs.attempt_count` reflects the true number of attempts,
+ * and a validation-only failure overwrites the (transient) per-attempt
+ * `succeeded` marking with the terminal `failed`.
+ */
+export async function runValidatedOperation(
+  config: ActiveProviderConfig,
+  request: GatewayRequest,
+  recorder: AiJobRecorder,
+): Promise<ValidatedRunOutcome> {
+  // Guard: this runner is for structured-output job types only (Req 14.2).
+  if (!isStructuredOutputJobType(request.jobType)) {
+    const error = sanitiseError(new Error('unsupported job type'));
+    await recorder.markFailed(1, error.message, config.modelId);
+    return { ok: false, error, attemptCount: 1 };
+  }
+
+  let lastValidationReason: ValidationFailureReason | null = null;
+
+  for (
+    let attemptCount = 1;
+    attemptCount <= MAX_STRUCTURED_OUTPUT_ATTEMPTS;
+    attemptCount++
+  ) {
+    const outcome = await runSingleAttempt(
+      config,
+      request,
+      recorder,
+      attemptCount,
+    );
+
+    // A transport/timeout/SSRF failure is terminal here — it is NOT a validation
+    // failure and was already recorded as failed by runSingleAttempt with a
+    // sanitised category. Surface it unchanged (Req 14.5, 19.1).
+    if (!outcome.ok) {
+      return { ok: false, error: outcome.error, attemptCount };
+    }
+
+    // The provider responded; validate the candidate JSON server-side BEFORE any
+    // storing/displaying (Req 14.2, 14.3). runSingleAttempt optimistically marked
+    // the job `succeeded`; if validation fails we correct it below.
+    const validation = validateStructuredOutput(
+      request.jobType,
+      outcome.result.text,
+    );
+
+    if (validation.valid) {
+      // Re-affirm succeeded with the final attempt count (Req 14.6). The data is
+      // INERT plain data; the caller never emits it as HTML/script (Req 14.8).
+      await recorder.markSucceeded(attemptCount, config.modelId);
+      return {
+        ok: true,
+        result: { data: validation.data, attemptCount },
+      };
+    }
+
+    // Validation failure (no_json / invalid_json / schema_violation) → do NOT
+    // store; retry if the bounded cap allows (Req 14.4, 14.6, 14.7, 19.3).
+    lastValidationReason = validation.reason;
+    if (!shouldRetryAfterValidationFailure(attemptCount)) {
+      // All attempts exhausted → reject WITHOUT storing, leave prior data
+      // unchanged, record the FINAL attempt_count and a recoverable, sanitised
+      // validation error (Req 14.4, 14.6). The specific `reason` is intentionally
+      // NOT surfaced to the client beyond the fixed category.
+      const error = {
+        code: 'invalid_ai_response' as SanitisedErrorCode,
+        message: SANITISED_ERROR_MESSAGE.invalid_ai_response,
+      };
+      await recorder.markFailed(attemptCount, error.message, config.modelId);
+      return { ok: false, error, attemptCount };
+    }
+    // else: loop and retry with an incremented attempt_count.
+  }
+
+  // Unreachable in practice (the loop returns on the final attempt), but keeps
+  // the function total and the compiler satisfied. Treat as a validation failure.
+  void lastValidationReason;
+  const error = {
+    code: 'invalid_ai_response' as SanitisedErrorCode,
+    message: SANITISED_ERROR_MESSAGE.invalid_ai_response,
+  };
+  await recorder.markFailed(
+    MAX_STRUCTURED_OUTPUT_ATTEMPTS,
+    error.message,
+    config.modelId,
+  );
+  return {
+    ok: false,
+    error,
+    attemptCount: MAX_STRUCTURED_OUTPUT_ATTEMPTS,
+  };
 }

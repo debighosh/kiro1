@@ -57,8 +57,11 @@ import {
   type GatewayRequest,
   evaluateEnablement,
   runSingleAttempt,
+  runValidatedOperation,
   startAiJob,
 } from './gateway.ts';
+import { isStructuredOutputJobType } from './structuredOutput.ts';
+import { runConnectionTest } from './connectionTest.ts';
 
 // -----------------------------------------------------------------------------
 // Request contract (wire body → GatewayRequest).
@@ -351,6 +354,80 @@ Deno.serve(async (req: Request): Promise<Response> => {
     modelId: activeConfig.modelId,
   });
 
+  // `connection_test` (task 29.5) runs its own DEDICATED path: a minimal
+  // ≤256-char non-sensitive probe verifying a non-empty usable response, then a
+  // representative structured-output probe; compatibility is "established" only
+  // when BOTH succeed (Req 13.2, 13.4, 13.11). It returns ONLY sanitised results
+  // (outcome, status category, model id, round-trip ms, ISO 8601 UTC timestamp,
+  // and on failure a fixed failure category) and makes NO persisted config
+  // change — HTTP 200; the `outcome` field conveys success/failure (Req 13.1,
+  // 13.3, 13.5, 13.10).
+  if (gatewayRequest.jobType === 'connection_test') {
+    const connectionTest = await runConnectionTest(activeConfig, recorder);
+    return jsonResponse(
+      req,
+      {
+        ai: { available: true },
+        job_id: recorder.jobId,
+        job_type: gatewayRequest.jobType,
+        connection_test: connectionTest,
+      },
+      200,
+    );
+  }
+
+  // Structured-output job types (categorisation / clustering / theme_insights /
+  // summary) go through the VALIDATED runner (task 29.4): each provider response
+  // is validated server-side against the shared Zod contract BEFORE any
+  // storing/displaying, with up to 3 attempts (1 + 2 retries) on validation
+  // failure / no candidate JSON; a final failure rejects WITHOUT storing and
+  // returns a recoverable `invalid_ai_response` (Req 14.2, 14.4, 14.6, 14.7).
+  if (isStructuredOutputJobType(gatewayRequest.jobType)) {
+    const validated = await runValidatedOperation(
+      activeConfig,
+      gatewayRequest,
+      recorder,
+    );
+
+    if (validated.ok) {
+      return jsonResponse(
+        req,
+        {
+          ai: { available: true },
+          job_id: recorder.jobId,
+          job_type: gatewayRequest.jobType,
+          attempt_count: validated.result.attemptCount,
+          // Req 14.8: the SPA renders every field of `result` as PLAIN TEXT —
+          // never as executable HTML/script. This payload is inert data only.
+          result: validated.result.data,
+        },
+        200,
+      );
+    }
+
+    // All attempts failed validation, or a transport/timeout/SSRF failure — a
+    // recoverable AI error; the core flow is unaffected (Req 19.1). The sanitised
+    // code/message carry no provider internals, credential, or offending text
+    // (Req 13.10, 20.7); the final attempt_count is recorded in ai_jobs.
+    return jsonResponse(
+      req,
+      {
+        ai: { available: true },
+        job_id: recorder.jobId,
+        job_type: gatewayRequest.jobType,
+        attempt_count: validated.attemptCount,
+        error: validated.error,
+      },
+      502,
+    );
+  }
+
+  // DEFENSIVE FALLBACK: every AI_JOB_TYPE is handled above (connection_test on
+  // its dedicated path; the four structured-output types via the validated
+  // runner). This single-attempt path only runs if a new job type is added
+  // without wiring — it fails safely with a sanitised recoverable error rather
+  // than an unhandled pass-through. `runSingleAttempt` remains imported for this
+  // guard and for the validated runner's per-attempt use.
   const outcome = await runSingleAttempt(activeConfig, gatewayRequest, recorder);
 
   if (outcome.ok) {
