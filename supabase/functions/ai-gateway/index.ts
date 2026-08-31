@@ -62,6 +62,9 @@ import {
 } from './gateway.ts';
 import { isStructuredOutputJobType } from './structuredOutput.ts';
 import { runConnectionTest } from './connectionTest.ts';
+import { runCategorisation } from './jobs/categorisation.ts';
+import { runClustering } from './jobs/clustering.ts';
+import { runThemeInsights } from './jobs/themeInsights.ts';
 
 // -----------------------------------------------------------------------------
 // Request contract (wire body → GatewayRequest).
@@ -87,6 +90,10 @@ const gatewayInputSchema = z.object({
   aggregate_metadata: z
     .record(z.string(), z.union([z.number(), z.string()]))
     .default({}),
+  // Categorisation-only: whether hidden questions are included in the batch.
+  // Defaults to false so hidden questions are EXCLUDED unless explicitly
+  // requested (Req 15.10). Ignored by other job types.
+  include_hidden: z.boolean().default(false),
 });
 
 type GatewayInput = z.infer<typeof gatewayInputSchema>;
@@ -373,6 +380,133 @@ Deno.serve(async (req: Request): Promise<Response> => {
         connection_test: connectionTest,
       },
       200,
+    );
+  }
+
+  // `categorisation` (task 30.1) has a DEDICATED path: it SELECTS the candidate
+  // questions for the event (hidden EXCLUDED unless `include_hidden` is set,
+  // Req 15.10), CHUNKS them into ≤100 batches (Req 15.1), runs each batch through
+  // the VALIDATED runner (exact, case-sensitive category match — a single invalid
+  // category rejects the WHOLE response, Req 15.3, 15.4), and STORES each valid
+  // item's category + optional confidence on the matching question, touching ONLY
+  // the category fields so the original `text` is preserved byte-for-byte
+  // (Req 15.5, 15.6, 15.9). It returns a sanitised run summary, not raw model text.
+  if (gatewayRequest.jobType === 'categorisation') {
+    const summary = await runCategorisation(
+      admin,
+      activeConfig,
+      gatewayRequest,
+      recorder,
+      { includeHidden: input.include_hidden },
+    );
+    return jsonResponse(
+      req,
+      {
+        ai: { available: true },
+        job_id: recorder.jobId,
+        job_type: gatewayRequest.jobType,
+        categorisation: summary,
+      },
+      200,
+    );
+  }
+
+  // `clustering` (task 31.1) has a DEDICATED path: it LOADS the event's APPROVED
+  // questions (status ∈ approved/featured/answered); if FEWER THAN 2 it returns
+  // zero clusters + `insufficient_data: true` WITHOUT calling the provider
+  // (Req 16.2). Otherwise it submits the approved-question set with a GROUPING
+  // PROMPT via the VALIDATED runner — PROMPT-BASED semantic grouping ONLY, no
+  // vector embeddings / pairwise similarity (Req 16.1) — VALIDATES that every
+  // returned question id belongs to the event (a single foreign id rejects the
+  // WHOLE response, Req 16.10), then ADDITIVELY creates `question_clusters` rows
+  // and sets members' `cluster_id`, NEVER deleting/merging originals (Req 16.4).
+  // Each returned cluster's vote total is COMPUTED (sum of member vote_count),
+  // NEVER stored (Req 16.5, 16.6).
+  if (gatewayRequest.jobType === 'clustering') {
+    const clustering = await runClustering(
+      admin,
+      activeConfig,
+      gatewayRequest,
+      recorder,
+    );
+    if (clustering.ok) {
+      return jsonResponse(
+        req,
+        {
+          ai: { available: true },
+          job_id: recorder.jobId,
+          job_type: gatewayRequest.jobType,
+          clustering: {
+            insufficient_data: clustering.insufficient_data,
+            approved_count: clustering.approved_count,
+            clusters: clustering.clusters,
+          },
+        },
+        200,
+      );
+    }
+    // Reject the whole response (foreign id, Req 16.10) or a provider/validation
+    // failure — retain all originals unchanged, create no clusters. The core flow
+    // is unaffected (Req 19.1); the sanitised error carries no provider internals.
+    return jsonResponse(
+      req,
+      {
+        ai: { available: true },
+        job_id: recorder.jobId,
+        job_type: gatewayRequest.jobType,
+        approved_count: clustering.approved_count,
+        error: clustering.error,
+      },
+      502,
+    );
+  }
+
+  // `theme_insights` (task 32.1) has a DEDICATED path: it LOADS the selected
+  // event's questions (id, text, vote_count), grounded ONLY in this event's data
+  // (Req 17.3). If there are NONE it returns an empty result set for all four
+  // categories + `has_data: false` WITHOUT calling the provider and WITHOUT
+  // fabrication (Req 17.5). Otherwise it submits the event's question texts with
+  // a GROUNDING PROMPT via the VALIDATED runner — the model is instructed NOT to
+  // invent counts, votes, or questions (Req 17.3, 17.4) — validated server-side
+  // against `aiThemeInsightsResultSchema` (≤5 top themes, ≤5 emerging concerns,
+  // ≤10 frequent topics, ≤5 notable questions, Req 17.1). The
+  // `notable_high_vote_questions` set is GROUNDED from the DB's actual vote
+  // counts (top 10% OR ≥10, whichever identifies fewer, Req 17.2) so vote totals
+  // are never fabricated (Req 17.4). Targets the ≤10 s envelope (Req 17.1).
+  if (gatewayRequest.jobType === 'theme_insights') {
+    const themeInsights = await runThemeInsights(
+      admin,
+      activeConfig,
+      gatewayRequest,
+      recorder,
+    );
+    if (themeInsights.ok) {
+      return jsonResponse(
+        req,
+        {
+          ai: { available: true },
+          job_id: recorder.jobId,
+          job_type: gatewayRequest.jobType,
+          question_count: themeInsights.question_count,
+          // Req 14.8: the SPA renders every field as PLAIN TEXT — inert data only.
+          theme_insights: themeInsights.insights,
+        },
+        200,
+      );
+    }
+    // Provider / timeout / validation failure — preserve stored event data
+    // unchanged, return the sanitised error (Req 17.6). The core flow is
+    // unaffected (Req 19.1); the sanitised error carries no provider internals.
+    return jsonResponse(
+      req,
+      {
+        ai: { available: true },
+        job_id: recorder.jobId,
+        job_type: gatewayRequest.jobType,
+        question_count: themeInsights.question_count,
+        error: themeInsights.error,
+      },
+      502,
     );
   }
 
