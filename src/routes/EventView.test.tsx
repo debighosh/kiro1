@@ -80,6 +80,34 @@ vi.mock('../lib/questions', () => ({
   subscribeToEventQuestions: vi.fn(() => () => {}),
 }));
 
+// task 23.5: the poll view now mounts `PollCard`, which imports `../lib/polls`
+// (→ the real supabase client, throws unless VITE_SUPABASE_* is set). Stub the
+// read/write/realtime helpers + the `PollError` class so importing the screen
+// stays env/network-free; `PollCard`'s own behaviour is covered by its tests.
+vi.mock('../lib/polls', () => ({
+  readActivePoll: vi.fn().mockResolvedValue(null),
+  submitPollResponse: vi.fn().mockResolvedValue(undefined),
+  subscribeToPollResults: vi.fn(() => () => {}),
+  PollError: class PollError extends Error {},
+}));
+
+// task 23.5: the word-cloud view now mounts `WordCloudCard`, which imports
+// `../lib/wordCloudClient` (→ the real supabase client). Stub the
+// read/write/realtime helpers + the constants/fns the card imports so the
+// module graph stays env/network-free; the card's own behaviour is covered by
+// its dedicated tests. (`../lib/wordcloud` is pure and needs no mock.)
+vi.mock('../lib/wordCloudClient', () => ({
+  readActivePrompt: vi.fn().mockResolvedValue(null),
+  readVisibleResponses: vi.fn().mockResolvedValue([]),
+  submitWordCloudResponse: vi.fn().mockResolvedValue(undefined),
+  subscribeToWordCloud: vi.fn(() => () => {}),
+  WordCloudClientError: class WordCloudClientError extends Error {},
+  WORD_CLOUD_TEXT_MAX: 50,
+  WORD_CLOUD_LENGTH_MESSAGE:
+    'Your response must be between 1 and 50 characters.',
+  countWordCloudCodePoints: (v: string) => [...v].length,
+}));
+
 // `./screens` also imports `../lib/presenter` (for the `PresenterView` screen,
 // task 17.1), which transitively loads `../lib/supabaseClient` (throws unless
 // VITE_SUPABASE_* is set). Stub the presenter reads so importing the screen
@@ -88,6 +116,13 @@ vi.mock('../lib/questions', () => ({
 vi.mock('../lib/presenter', () => ({
   readPresenterQuestions: vi.fn().mockResolvedValue([]),
   readFeaturedQuestion: vi.fn().mockResolvedValue(null),
+  // task 24.1: `PresenterView` also reads the active poll + word cloud for the
+  // M3 presenter modes. Stub them to the empty defaults so importing the screen
+  // stays env/network-free.
+  readPresenterActivePoll: vi.fn().mockResolvedValue(null),
+  readPresenterWordCloud: vi
+    .fn()
+    .mockResolvedValue({ prompt: null, responses: [] }),
   subscribeToPresenter: () => () => {},
   isPresenterMode: (v: unknown) =>
     typeof v === 'string' &&

@@ -1,0 +1,122 @@
+-- ============================================================================
+-- Migration: 20260101000021_poll_responses_rls.sql
+-- Purpose:   Enable Row Level Security (RLS) on the `poll_responses` table and
+--            establish its access posture. The net effect is: RLS ENABLED,
+--            DEFAULT-DENY, and NO client (anon/authenticated) policies. All
+--            response access — recording, replacing, and any per-response read —
+--            is mediated by the SECURITY DEFINER upsert-replace poll-response
+--            RPC (task 21.3) and the service role.
+--
+-- Ordering:  Sorts AFTER 20260101000020_polls_rls.sql (task 20.1, which enables
+--            RLS on `polls`/`poll_options`) and after
+--            20260101000018_poll_responses.sql (task 19.3, which creates the
+--            table). Using …000021 is correct per the plan. This migration owns
+--            a DIFFERENT file from the concurrently-authored task 20.1
+--            (…000020), so there is no conflict.
+--
+-- Scope (Task 20.2 only):
+--   * Enables RLS on `poll_responses` (default deny) and documents the
+--     server-mediated design. It deliberately adds NO permissive policies.
+--   * It does NOT touch `polls`/`poll_options` RLS (task 20.1) and does NOT
+--     implement the atomic upsert-replace RPC (task 21.3) — those are owned by
+--     other tasks.
+--
+-- ---------------------------------------------------------------------------
+-- SECURITY MODEL — why NO client policies (server-mediated responses)
+-- ---------------------------------------------------------------------------
+-- A poll response is recorded, or an existing response replaced, EXCLUSIVELY by
+-- the SECURITY DEFINER upsert-replace poll-response RPC (task 21.3): it performs
+-- BOTH the `poll_responses` row insert/replace AND the atomic
+-- `poll_options.response_count` maintenance in one transaction, and it runs with
+-- the DEFINER's rights (which bypass RLS on `poll_responses`). Therefore direct
+-- client (anon) INSERT/UPDATE/DELETE is NOT required for responses to work.
+-- Keeping writes server-mediated is the safer, more consistent choice:
+--   * The RPC is the single place that enforces eligibility (parent poll is
+--     `open` on a live event — never a `draft` or `closed` poll), the
+--     one-response-per-participant-per-poll UNIQUE (participant_identifier,
+--     poll_id) rule with upsert-replace semantics (Req 5.7, 5.8), rate limits
+--     (Req 21.13–21.15), and the atomic count maintenance across the old and
+--     new option's `poll_options.response_count` in one transaction. Splitting
+--     write authority between a client RLS policy and the RPC would create two
+--     enforcement paths and risk the cached `response_count` drifting out of
+--     sync with the raw rows.
+--   * This mirrors how anonymous question voting is server-mediated through the
+--     SECURITY DEFINER vote RPC (task 13.3 / question_votes RLS task 12.2)
+--     rather than a direct client write.
+-- DECISION: DO NOT add anon INSERT/UPDATE/DELETE policies here. Response
+-- recording and replacement are performed EXCLUSIVELY by the SECURITY DEFINER
+-- upsert-replace poll-response RPC (task 21.3).
+--
+-- ---------------------------------------------------------------------------
+-- SECURITY MODEL — why NO client SELECT (participant privacy)
+-- ---------------------------------------------------------------------------
+-- Raw `poll_responses` rows contain `participant_identifier`. Although that
+-- token is opaque and PII-free (Req 21.18), it links a participant to the exact
+-- option they chose in a poll and MUST NEVER be readable by anonymous clients.
+-- Aggregate poll results are read by clients from `poll_options.response_count`
+-- (the cached per-option count maintained by the upsert-replace RPC), NOT by
+-- counting raw response rows (Req 8.6 — analytics/UI never exposes raw
+-- Participant_Identifier values).
+--
+-- We could optionally grant authenticated admins SELECT on their events'
+-- response rows for analytics, but to keep `participant_identifier` private even
+-- from the admin client, we prefer NO client SELECT at all: any per-response
+-- analytics is performed server-side via the service role (which bypasses RLS),
+-- and the headline per-option tallies come from `poll_options.response_count`.
+-- DECISION: NO client SELECT policy. Default deny stands.
+--
+-- ---------------------------------------------------------------------------
+-- NET EFFECT (same shape as the `question_votes` table, migration …000012):
+--   RLS ENABLED, DEFAULT DENY, NO client policies. Anonymous and authenticated
+--   clients can neither read nor write `poll_responses` directly. Access is
+--   solely via the SECURITY DEFINER upsert-replace poll-response RPC (task 21.3)
+--   and the service role (Req 21.3 RLS enabled; Req 21.4 unauthorised/anon
+--   access rejected; Req 21.5 anonymous access confined to live-event data —
+--   enforced inside the RPC; Req 21.6 admin/service-role writes only).
+--
+-- Requirements traceability:
+--   * Req 5.7  — one response row per participant per poll — enforced by the DB
+--                UNIQUE constraint (migration …000018) relied on by the RPC;
+--                no client write path exists.
+--   * Req 5.8  — a participant changing their answer replaces their single
+--                existing row (upsert-replace) — enforced by the RPC + UNIQUE
+--                constraint (no client write path exists).
+--   * Req 8.6  — raw Participant_Identifier values are never exposed: NO client
+--                SELECT of response rows; per-option tallies come from
+--                `poll_options.response_count`.
+--   * Req 21.3 — RLS enabled on this client-exposed table (default deny).
+--   * Req 21.4 — direct client access to response rows is rejected (no policies).
+--   * Req 21.5 — anonymous access confined to live-event data — the response
+--                RPC gates on the parent poll being `open` on a live event; no
+--                blanket client access.
+--   * Req 21.6 — create/replace of responses flows through the service-role /
+--                SECURITY DEFINER RPC; no client write policy is granted.
+-- Design ref:   RLS Design → `poll_responses` per-table policies; General
+--               policy strategy (default deny); Server-side rate limiting.
+--
+-- Idempotency: RLS enablement is naturally idempotent (ALTER … ENABLE is a
+-- no-op if already enabled). No policies are created, so the migration is safe
+-- to re-run.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- poll_responses
+-- ----------------------------------------------------------------------------
+-- Enable RLS (default deny): with RLS on and no permissive policy, every direct
+-- client access is denied until an explicit policy grants it (Req 21.3, 21.4).
+-- We intentionally define NO policies below — see the header for the rationale.
+ALTER TABLE poll_responses ENABLE ROW LEVEL SECURITY;
+
+-- NOTE (no client policies — server-mediated by design):
+--   * No anonymous/authenticated INSERT, UPDATE or DELETE policy. Response
+--     recording and replacement are performed EXCLUSIVELY by the SECURITY
+--     DEFINER upsert-replace poll-response RPC (task 21.3), which enforces
+--     parent-poll eligibility (`open` on a live event — never `draft`/`closed`),
+--     the one-response-per-participant-per-poll UNIQUE constraint with
+--     upsert-replace semantics (Req 5.7, 5.8), and rate limits
+--     (Req 21.13–21.15), and atomically updates `poll_options.response_count`.
+--     This mirrors the server-mediated question-vote path.
+--   * No SELECT policy. Raw response rows carry `participant_identifier` and
+--     must never be readable by clients; aggregate per-option tallies are read
+--     from `poll_options.response_count` (Req 8.6). Any per-response analytics
+--     is service-role only (the service role bypasses RLS).
