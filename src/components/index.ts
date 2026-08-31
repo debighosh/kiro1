@@ -12,3 +12,15 @@ export type { QrDisplayProps, QrErrorCorrectionLevel } from './QrDisplay';
 
 export { StatusTransitionControl } from './StatusTransitionControl';
 export type { StatusTransitionControlProps } from './StatusTransitionControl';
+
+export { EventJoinCard } from './EventJoinCard';
+export type { EventJoinCardProps } from './EventJoinCard';
+
+export { QuestionSubmissionForm } from './QuestionSubmissionForm';
+export type { QuestionSubmissionFormProps } from './QuestionSubmissionForm';
+
+export { QuestionListAndVoting } from './QuestionListAndVoting';
+export type { QuestionListAndVotingProps } from './QuestionListAndVoting';
+
+export { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
+export type { ConnectionStatusIndicatorProps } from './ConnectionStatusIndicator';

@@ -99,9 +99,15 @@ describe('classifyTransition — mirrors the Edge Function decision (Req 1.8, 1.
   });
 
   it('classifies archived → other statuses as archived_not_reactivatable (Req 1.11)', () => {
-    expect(classifyTransition('archived', 'draft')).toBe('archived_not_reactivatable');
-    expect(classifyTransition('archived', 'live')).toBe('archived_not_reactivatable');
-    expect(classifyTransition('archived', 'ended')).toBe('archived_not_reactivatable');
+    expect(classifyTransition('archived', 'draft')).toBe(
+      'archived_not_reactivatable',
+    );
+    expect(classifyTransition('archived', 'live')).toBe(
+      'archived_not_reactivatable',
+    );
+    expect(classifyTransition('archived', 'ended')).toBe(
+      'archived_not_reactivatable',
+    );
   });
 
   it('classifies skipping / backwards transitions as invalid', () => {

@@ -151,7 +151,10 @@ export function AdminEventEditor(): JSX.Element {
     [fieldErrors],
   );
 
-  function update<K extends keyof FormValues>(key: K, value: FormValues[K]): void {
+  function update<K extends keyof FormValues>(
+    key: K,
+    value: FormValues[K],
+  ): void {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -179,9 +182,7 @@ export function AdminEventEditor(): JSX.Element {
           setGeneralError(error.message);
         }
       } else {
-        setGeneralError(
-          'The event could not be created. Please try again.',
-        );
+        setGeneralError('The event could not be created. Please try again.');
       }
       setStatus('error');
     }
@@ -211,7 +212,10 @@ export function AdminEventEditor(): JSX.Element {
           code below, and open the presenter view when you are ready.
         </p>
 
-        <section aria-labelledby={`${generalErrorId}-audience`} className="mt-6">
+        <section
+          aria-labelledby={`${generalErrorId}-audience`}
+          className="mt-6"
+        >
           <h2
             id={`${generalErrorId}-audience`}
             className="text-lg font-medium text-ink"
@@ -369,9 +373,7 @@ export function AdminEventEditor(): JSX.Element {
             onChange={(e) => update('startsAt', e.target.value)}
             disabled={isSubmitting}
             aria-invalid={startsAtError ? true : undefined}
-            aria-describedby={
-              startsAtError ? `${startsAtId}-error` : undefined
-            }
+            aria-describedby={startsAtError ? `${startsAtId}-error` : undefined}
             className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
           />
           {startsAtError ? (
@@ -426,11 +428,7 @@ export function AdminEventEditor(): JSX.Element {
             className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
           />
           {brandColourError ? (
-            <p
-              id={`${brandColourId}-error`}
-              role="alert"
-              className="text-ink"
-            >
+            <p id={`${brandColourId}-error`} role="alert" className="text-ink">
               {brandColourError}
             </p>
           ) : null}
@@ -451,9 +449,7 @@ export function AdminEventEditor(): JSX.Element {
             disabled={isSubmitting}
             className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
           >
-            <option value="pre">
-              Pre-moderation (approve before showing)
-            </option>
+            <option value="pre">Pre-moderation (approve before showing)</option>
             <option value="post">
               Post-moderation (show, then remove if needed)
             </option>

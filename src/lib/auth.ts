@@ -32,11 +32,7 @@
  * (`admin_profiles`).
  */
 
-import type {
-  AuthChangeEvent,
-  Session,
-  User,
-} from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 
 /**
@@ -49,7 +45,8 @@ import { supabase } from './supabaseClient';
  * See supabase/migrations/20260101000008_admin_audit_rls.sql: "Profile rows are
  * created on first admin sign-in by an Edge Function using the service role".
  */
-export const ADMIN_PROFILE_PROVISION_FUNCTION = 'provision-admin-profile' as const;
+export const ADMIN_PROFILE_PROVISION_FUNCTION =
+  'provision-admin-profile' as const;
 
 /** Shape of an `admin_profiles` row (Design → Data Models → `admin_profiles`). */
 export interface AdminProfile {
@@ -125,9 +122,7 @@ export async function signInWithPassword(
   // Defensive: a non-error response without a session/user should never happen
   // for password sign-in, but guard so downstream consumers get a typed result.
   if (!data.session || !data.user) {
-    throw new AdminAuthError(
-      'Sign-in succeeded but no session was returned.',
-    );
+    throw new AdminAuthError('Sign-in succeeded but no session was returned.');
   }
 
   return { session: data.session, user: data.user };

@@ -59,6 +59,78 @@ vi.mock('../lib/auth', () => ({
   AdminAuthError,
 }));
 
+// `./screens` now also imports `../lib/eventLookup` (for the audience join
+// flow, task 14.3), which transitively loads the real supabase client and
+// throws without VITE_ env vars. This test only exercises `AdminLogin`, so we
+// stub the lookup to keep the module graph free of the supabase client.
+vi.mock('../lib/eventLookup', () => ({
+  findEventByRef: vi.fn().mockResolvedValue(null),
+}));
+
+// `./screens` also imports `../lib/presenter` (for the `PresenterView` screen,
+// task 17.1), which transitively loads the real supabase client and throws
+// without VITE_ env vars. This test only exercises `AdminLogin`, so we stub the
+// presenter reads to keep the module graph free of the supabase client.
+vi.mock('../lib/presenter', () => ({
+  readPresenterQuestions: vi.fn().mockResolvedValue([]),
+  readFeaturedQuestion: vi.fn().mockResolvedValue(null),
+  subscribeToPresenter: () => () => {},
+  isPresenterMode: (v: unknown) =>
+    typeof v === 'string' &&
+    [
+      'join',
+      'featured_question',
+      'top_questions',
+      'poll_results',
+      'word_cloud',
+      'ai_themes',
+      'waiting',
+    ].includes(v),
+}));
+
+// `./screens` also mounts `QuestionSubmissionForm` into the audience event view
+// (task 15.1), which imports `../lib/questions`; that transitively loads the
+// real supabase client and throws without VITE_ env vars. This test only
+// exercises `AdminLogin`, so stub the submit helper to keep the module graph
+// free of the supabase client.
+vi.mock('../lib/questions', () => ({
+  submitQuestion: vi.fn(),
+  QuestionError: class QuestionError extends Error {},
+  QUESTION_TEXT_MAX: 300,
+  QUESTION_LENGTH_MESSAGE:
+    'Your question must be between 1 and 300 characters.',
+  countQuestionCodePoints: (v: string) => [...v].length,
+  // task 15.2: `QuestionListAndVoting` (mounted alongside the submit form) reads
+  // the list on mount and toggles votes. Stub the read/vote helpers so the
+  // module graph stays free of the real supabase client.
+  readAudienceQuestions: vi.fn().mockResolvedValue([]),
+  castQuestionVote: vi.fn().mockResolvedValue(0),
+  removeQuestionVote: vi.fn().mockResolvedValue(0),
+  DEFAULT_QUESTION_SORT: 'most_votes',
+  // task 15.3: the live Q&A section wires `useRealtimeChannel`, which calls
+  // `subscribeToEventQuestions` (→ the real supabase client). Stub it to a
+  // no-op unsubscribe so the module graph stays free of the real client.
+  subscribeToEventQuestions: vi.fn(() => () => {}),
+}));
+
+// `./screens` also imports the shared browser Supabase client directly (for the
+// `PresenterView` realtime subscription, task 17.1). Constructing the real
+// client throws without VITE_ env vars, so stub it with the minimal chainable
+// Realtime surface `./screens` touches. No network/env.
+vi.mock('../lib/supabaseClient', () => {
+  const channel = {
+    on: vi.fn().mockReturnThis(),
+    subscribe: vi.fn().mockReturnThis(),
+    unsubscribe: vi.fn(),
+  };
+  return {
+    supabase: {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    },
+  };
+});
+
 // --- Mock react-router's useNavigate while keeping everything else real. ----
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {

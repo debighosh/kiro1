@@ -109,15 +109,20 @@ describe('signInWithPassword', () => {
   it('throws a typed AdminAuthError when credentials are rejected', async () => {
     authMock.signInWithPassword.mockResolvedValue({
       data: { session: null, user: null },
-      error: { message: 'Invalid login credentials', code: 'invalid_credentials', status: 400 },
+      error: {
+        message: 'Invalid login credentials',
+        code: 'invalid_credentials',
+        status: 400,
+      },
     });
 
     await expect(signInWithPassword('a@b.com', 'bad')).rejects.toBeInstanceOf(
       AdminAuthError,
     );
-    await expect(
-      signInWithPassword('a@b.com', 'bad'),
-    ).rejects.toMatchObject({ code: 'invalid_credentials', status: 400 });
+    await expect(signInWithPassword('a@b.com', 'bad')).rejects.toMatchObject({
+      code: 'invalid_credentials',
+      status: 400,
+    });
   });
 
   it('throws when no session is returned despite no error', async () => {
@@ -156,7 +161,10 @@ describe('getSession', () => {
   });
 
   it('returns null when signed out', async () => {
-    authMock.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    authMock.getSession.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
     await expect(getSession()).resolves.toBeNull();
   });
 
@@ -171,7 +179,10 @@ describe('getSession', () => {
 
 describe('getCurrentUser', () => {
   it('returns the user when authenticated', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+    authMock.getUser.mockResolvedValue({
+      data: { user: FAKE_USER },
+      error: null,
+    });
     await expect(getCurrentUser()).resolves.toBe(FAKE_USER);
   });
 
@@ -206,13 +217,19 @@ describe('onAuthStateChange', () => {
 
 describe('ensureAdminProfile', () => {
   it('throws when there is no authenticated user', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: null }, error: { message: 'no session' } });
+    authMock.getUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'no session' },
+    });
     await expect(ensureAdminProfile()).rejects.toBeInstanceOf(AdminAuthError);
     expect(fromMock).not.toHaveBeenCalled();
   });
 
   it('returns { status: "exists" } when the owner-scoped SELECT finds a row', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+    authMock.getUser.mockResolvedValue({
+      data: { user: FAKE_USER },
+      error: null,
+    });
     const chain = mockSelectChain({ data: FAKE_PROFILE, error: null });
 
     const result = await ensureAdminProfile();
@@ -225,16 +242,25 @@ describe('ensureAdminProfile', () => {
   });
 
   it('throws AdminAuthError when the SELECT fails unexpectedly', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+    authMock.getUser.mockResolvedValue({
+      data: { user: FAKE_USER },
+      error: null,
+    });
     mockSelectChain({ data: null, error: { message: 'db down', code: '500' } });
 
     await expect(ensureAdminProfile()).rejects.toBeInstanceOf(AdminAuthError);
   });
 
   it('delegates to the provisioning Edge Function when the row is missing', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+    authMock.getUser.mockResolvedValue({
+      data: { user: FAKE_USER },
+      error: null,
+    });
     mockSelectChain({ data: null, error: null });
-    invokeMock.mockResolvedValue({ data: { profile: FAKE_PROFILE }, error: null });
+    invokeMock.mockResolvedValue({
+      data: { profile: FAKE_PROFILE },
+      error: null,
+    });
 
     const result = await ensureAdminProfile();
 
@@ -246,9 +272,15 @@ describe('ensureAdminProfile', () => {
   });
 
   it('defers provisioning (no throw, no client insert) when the function errors', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+    authMock.getUser.mockResolvedValue({
+      data: { user: FAKE_USER },
+      error: null,
+    });
     mockSelectChain({ data: null, error: null });
-    invokeMock.mockResolvedValue({ data: null, error: { message: 'not deployed' } });
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: { message: 'not deployed' },
+    });
 
     const result = await ensureAdminProfile();
 
@@ -256,7 +288,10 @@ describe('ensureAdminProfile', () => {
   });
 
   it('defers provisioning when the function invocation throws (transport failure)', async () => {
-    authMock.getUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+    authMock.getUser.mockResolvedValue({
+      data: { user: FAKE_USER },
+      error: null,
+    });
     mockSelectChain({ data: null, error: null });
     invokeMock.mockRejectedValue(new Error('network'));
 

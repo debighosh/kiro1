@@ -60,7 +60,11 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
-import { errorResponse, type FieldError, jsonResponse } from '../_shared/http.ts';
+import {
+  errorResponse,
+  type FieldError,
+  jsonResponse,
+} from '../_shared/http.ts';
 
 // -----------------------------------------------------------------------------
 // Validation contract for the status-transition input.
@@ -120,7 +124,9 @@ function toFieldErrors(error: z.ZodError): FieldError[] {
 // (archived → anything, Req 1.11) are all rejected.
 // -----------------------------------------------------------------------------
 
-const ALLOWED_TRANSITIONS: Readonly<Record<EventStatus, readonly EventStatus[]>> = {
+const ALLOWED_TRANSITIONS: Readonly<
+  Record<EventStatus, readonly EventStatus[]>
+> = {
   draft: ['live'],
   live: ['ended'],
   ended: ['archived'],

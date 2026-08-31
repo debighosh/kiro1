@@ -119,9 +119,7 @@ export const brandColourSchema = z
 export const logoPathSchema = z.string().min(1).optional();
 
 /** Moderation mode enum, mirroring the `moderation_mode` DB enum (Req 3.6, 3.8). */
-export const moderationModeSchema = z
-  .enum(['pre', 'post'])
-  .default('pre');
+export const moderationModeSchema = z.enum(['pre', 'post']).default('pre');
 
 /** ISO 8601 datetime string (Req 1.1). */
 export const isoDatetimeSchema = z.iso.datetime({
@@ -163,7 +161,10 @@ export const eventInputFields = z.object({
  * inline message (Design: Validation errors → "structured error identifying
  * each invalid field").
  */
-const endsAfterStarts = (data: { starts_at: string; ends_at: string }): boolean =>
+const endsAfterStarts = (data: {
+  starts_at: string;
+  ends_at: string;
+}): boolean =>
   new Date(data.ends_at).getTime() > new Date(data.starts_at).getTime();
 
 const endsAfterStartsIssue = {
@@ -191,13 +192,15 @@ export const eventCreateInputSchema = eventInputFields.refine(
  * validates, but any field that IS supplied must satisfy its create-time
  * constraint. Also excludes `presenter_token` / `status`.
  */
-export const eventEditInputSchema = eventInputFields.partial().refine(
-  (data) =>
-    data.starts_at === undefined ||
-    data.ends_at === undefined ||
-    new Date(data.ends_at).getTime() > new Date(data.starts_at).getTime(),
-  endsAfterStartsIssue,
-);
+export const eventEditInputSchema = eventInputFields
+  .partial()
+  .refine(
+    (data) =>
+      data.starts_at === undefined ||
+      data.ends_at === undefined ||
+      new Date(data.ends_at).getTime() > new Date(data.starts_at).getTime(),
+    endsAfterStartsIssue,
+  );
 
 /** Inferred type for validated event-create input. */
 export type EventCreateInput = z.infer<typeof eventCreateInputSchema>;

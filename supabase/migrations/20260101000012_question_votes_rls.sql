@@ -1,0 +1,114 @@
+-- ============================================================================
+-- Migration: 20260101000012_question_votes_rls.sql
+-- Purpose:   Enable Row Level Security (RLS) on the `question_votes` table and
+--            establish its access posture. The net effect is: RLS ENABLED,
+--            DEFAULT-DENY, and NO client (anon/authenticated) policies. All vote
+--            access — casting, removing, and any per-vote read — is mediated by
+--            the SECURITY DEFINER vote RPC (task 13.3) and the service role.
+--
+-- Ordering:  Sorts AFTER 20260101000011_questions_rls.sql (task 12.1) and after
+--            20260101000010_question_votes.sql (task 11.3, which creates the
+--            table). Using …000012 is correct per the plan. This migration owns
+--            a DIFFERENT file from the concurrently-authored task 12.1
+--            (…000011), so there is no conflict.
+--
+-- Scope (Task 12.2 only):
+--   * Enables RLS on `question_votes` (default deny) and documents the
+--     server-mediated design. It deliberately adds NO permissive policies.
+--   * It does NOT touch `questions` RLS (task 12.1) and does NOT implement the
+--     atomic vote RPC (task 13.3) — those are owned by other tasks.
+--
+-- ---------------------------------------------------------------------------
+-- SECURITY MODEL — why NO client policies (server-mediated voting)
+-- ---------------------------------------------------------------------------
+-- The design (RLS Design → `question_votes` per-table policies) allows, in
+-- principle, anonymous INSERT/DELETE for questions in an eligible status
+-- (approved/featured) on a live event, with the DB UNIQUE constraint enforcing
+-- one vote and a SECURITY DEFINER RPC applying the atomic `vote_count` change.
+--
+-- However, the vote RPC (task 13.3) is SECURITY DEFINER: it performs BOTH the
+-- vote row insert/delete AND the `questions.vote_count` change atomically, and
+-- it runs with the DEFINER's rights (which bypass RLS on `question_votes`).
+-- Therefore direct client (anon) INSERT/DELETE is NOT required for voting to
+-- work. Keeping writes server-mediated is the safer, more consistent choice:
+--   * The RPC is the single place that enforces eligibility (question status
+--     approved/featured AND parent event live — Req 4.2, 4.8), the one-vote
+--     UNIQUE (participant_identifier, question_id) rule (Req 4.3, 4.4), rate
+--     limits (Req 21.13–21.15), and the atomic count maintenance (Req 4.1, 4.5)
+--     in one transaction. Splitting write authority between a client RLS policy
+--     and the RPC would create two enforcement paths and risk the cached
+--     `vote_count` drifting out of sync with the raw rows.
+--   * This mirrors how anonymous question submission is server-mediated through
+--     the rate-limited submit RPC (task 13.2 / questions RLS task 12.1) rather
+--     than a direct client insert.
+-- DECISION: DO NOT add anon INSERT/DELETE policies here. Vote casting and
+-- removal are performed EXCLUSIVELY by the SECURITY DEFINER vote RPC (task 13.3).
+--
+-- ---------------------------------------------------------------------------
+-- SECURITY MODEL — why NO client SELECT (participant privacy)
+-- ---------------------------------------------------------------------------
+-- Raw `question_votes` rows contain `participant_identifier`. Although that
+-- token is opaque and PII-free (Req 2.5), it links a participant to the exact
+-- questions they voted on and MUST NEVER be readable by anonymous clients.
+-- Aggregate vote counts are read by clients from `questions.vote_count`
+-- (the cached count maintained by the vote RPC), NOT by counting raw vote rows
+-- (Req 8.6 — analytics/UI never exposes raw Participant_Identifier values).
+--
+-- We could optionally grant authenticated admins SELECT on their events' vote
+-- rows for analytics, but to keep `participant_identifier` private even from
+-- the admin client, we prefer NO client SELECT at all: any per-vote analytics
+-- is performed server-side via the service role (which bypasses RLS), and the
+-- headline "total question votes" metric comes from `questions.vote_count`.
+-- DECISION: NO client SELECT policy. Default deny stands.
+--
+-- ---------------------------------------------------------------------------
+-- NET EFFECT (same shape as the `rate_events` table, migration …000013):
+--   RLS ENABLED, DEFAULT DENY, NO client policies. Anonymous and authenticated
+--   clients can neither read nor write `question_votes` directly. Access is
+--   solely via the SECURITY DEFINER vote RPC (task 13.3) and the service role
+--   (Req 21.3 RLS enabled; Req 21.4 unauthorised/anon access rejected; Req 21.5
+--   anonymous access confined to live-event data — enforced inside the RPC).
+--
+-- Requirements traceability:
+--   * Req 4.2  — a vote is recorded (and counted) only for a question whose
+--                status is approved/featured — enforced by the vote RPC.
+--   * Req 4.3  — one active vote per participant per question — enforced by the
+--                DB UNIQUE constraint (migration …000010) relied on by the RPC.
+--   * Req 4.4  — duplicate vote rejected, count unchanged — enforced by the
+--                UNIQUE constraint + RPC (no client write path exists).
+--   * Req 4.8  — votes on pending/hidden questions rejected — enforced by the
+--                RPC's eligibility check (no client write path exists).
+--   * Req 8.6  — raw Participant_Identifier values are never exposed: NO client
+--                SELECT of vote rows; counts come from `questions.vote_count`.
+--   * Req 21.3 — RLS enabled on this client-exposed table (default deny).
+--   * Req 21.4 — direct client access to vote rows is rejected (no policies).
+--   * Req 21.5 — anonymous access confined to live-event data — the vote RPC
+--                gates on `event_is_live(event_id)`; no blanket client access.
+-- Design ref:   RLS Design → `question_votes` per-table policies; General
+--               policy strategy (default deny); Server-side rate limiting.
+--
+-- Idempotency: RLS enablement is naturally idempotent (ALTER … ENABLE is a
+-- no-op if already enabled). No policies are created, so the migration is safe
+-- to re-run.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- question_votes
+-- ----------------------------------------------------------------------------
+-- Enable RLS (default deny): with RLS on and no permissive policy, every direct
+-- client access is denied until an explicit policy grants it (Req 21.3, 21.4).
+-- We intentionally define NO policies below — see the header for the rationale.
+ALTER TABLE question_votes ENABLE ROW LEVEL SECURITY;
+
+-- NOTE (no client policies — server-mediated by design):
+--   * No anonymous/authenticated INSERT or DELETE policy. Vote casting and
+--     removal are performed EXCLUSIVELY by the SECURITY DEFINER vote RPC
+--     (task 13.3), which enforces question-status eligibility (approved/
+--     featured) on a live event (Req 4.2, 4.8), the one-vote UNIQUE constraint
+--     (Req 4.3, 4.4), and rate limits (Req 21.13–21.15), and atomically updates
+--     `questions.vote_count` (Req 4.1, 4.5). This mirrors the server-mediated
+--     question-submission path.
+--   * No SELECT policy. Raw vote rows carry `participant_identifier` and must
+--     never be readable by clients; aggregate counts are read from
+--     `questions.vote_count` (Req 8.6). Any per-vote analytics is service-role
+--     only (the service role bypasses RLS).

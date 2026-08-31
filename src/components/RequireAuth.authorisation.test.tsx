@@ -50,8 +50,7 @@ const unsubscribe = vi.fn();
 
 /** The auth-state callback captured from the guard's subscription. */
 let authCallback:
-  | ((event: AuthChangeEvent, session: Session | null) => void)
-  | undefined;
+  ((event: AuthChangeEvent, session: Session | null) => void) | undefined;
 
 vi.mock('../lib/auth', () => ({
   getCurrentUser: () => getCurrentUser(),

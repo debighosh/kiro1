@@ -26,7 +26,8 @@ export const FORBIDDEN_CLIENT_ENV_NAMES = Object.freeze([
   'AI_ENDPOINT_ALLOWLIST',
 ] as const);
 
-export type ForbiddenClientEnvName = (typeof FORBIDDEN_CLIENT_ENV_NAMES)[number];
+export type ForbiddenClientEnvName =
+  (typeof FORBIDDEN_CLIENT_ENV_NAMES)[number];
 
 /** Typed shape of the environment values exposed to the browser. */
 export interface ClientEnv {
@@ -62,7 +63,10 @@ export function assertClientSafeEnvName(name: string): string {
 }
 
 /** Required client-side (`VITE_`-prefixed) variable names. */
-const REQUIRED_VITE_ENV_NAMES = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const;
+const REQUIRED_VITE_ENV_NAMES = [
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
+] as const;
 
 /**
  * Reads and validates the `VITE_`-prefixed client environment.
@@ -75,7 +79,10 @@ const REQUIRED_VITE_ENV_NAMES = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] 
  *   keep the loader unit-testable without global mutation.
  */
 export function readClientEnv(
-  source: Record<string, unknown> = import.meta.env as unknown as Record<string, unknown>,
+  source: Record<string, unknown> = import.meta.env as unknown as Record<
+    string,
+    unknown
+  >,
 ): ClientEnv {
   const values: Record<string, string> = {};
   const missing: string[] = [];

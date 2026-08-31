@@ -3,8 +3,8 @@
 Supabase project scaffold for **MSS LivePulse**. This directory holds the local
 development configuration, database migrations, seed data, and Edge Functions
 for the Supabase managed backend (PostgreSQL + RLS, Realtime, Auth, Edge
-Functions). See `.kiro/specs/mss-livepulse/design.md` → *Architecture (Supabase
-managed services)* and *Migrations and seed data*.
+Functions). See `.kiro/specs/mss-livepulse/design.md` → _Architecture (Supabase
+managed services)_ and _Migrations and seed data_.
 
 ## Layout
 

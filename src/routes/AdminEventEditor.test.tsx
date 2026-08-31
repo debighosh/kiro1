@@ -143,9 +143,7 @@ describe('AdminEventEditor (create flow)', () => {
       screen.getByRole('link', { name: 'https://app.example/e/evt-1' }),
     ).toBeInTheDocument();
     // QrDisplay renders a role="img" region with a non-empty accessible name.
-    expect(
-      screen.getByRole('img', { name: /qr code/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /qr code/i })).toBeInTheDocument();
   });
 
   it('shows inline field errors and does NOT call the network on invalid input (Req 1.2)', async () => {

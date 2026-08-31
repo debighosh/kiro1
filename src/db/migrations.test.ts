@@ -299,3 +299,223 @@ describe('Milestone 1 schema / migrations', () => {
     });
   });
 });
+
+/**
+ * Task 11.4 — Milestone 2 (Core Live Q&A) schema / migration verification.
+ *
+ * WHAT THIS BLOCK ADDS
+ * --------------------
+ * This extends the static, source-level migration guard above to cover the
+ * Milestone 2 Q&A data model, using the SAME approach as the Milestone-1
+ * assertions: it reads the actual migration SQL files that ship in the repo
+ * (whitespace-normalised) and asserts, from scratch — WITHOUT a live database —
+ * that:
+ *   - the `question_status` enum is defined with EXACTLY the five values
+ *     pending / approved / featured / answered / hidden;
+ *   - the `questions` table is created with every required column, the
+ *     `char_length(text) BETWEEN 1 AND 300` CHECK, the `vote_count >= 0` CHECK,
+ *     and the `event_id` FK → events(id) ON DELETE CASCADE;
+ *   - the questions-indexes migration declares idx_questions_event,
+ *     idx_questions_status, idx_questions_created, idx_questions_votes, and the
+ *     partial UNIQUE (event_id, submission_key) WHERE submission_key IS NOT NULL;
+ *   - `question_votes` is created with the UNIQUE (participant_identifier,
+ *     question_id) one-vote rule, the question_id FK → questions(id) ON DELETE
+ *     CASCADE, the event_id FK → events(id) ON DELETE CASCADE, and
+ *     idx_votes_question;
+ *   - the migration file names sort so the schema still builds cleanly from a
+ *     fresh database: the questions table migration sorts before its votes
+ *     migration (which FK-references questions), and both sort after the
+ *     Milestone-1 …000008 migration.
+ *
+ * As with Milestone 1, a live-DB apply (real INSERTs exercising the CHECKs and
+ * the UNIQUE constraint) is DEFERRED TO CI, where a PostgreSQL service is
+ * available — no Postgres/psql/pg-mem can faithfully apply these migrations in
+ * this sandbox (see the Milestone-1 rationale above). This static block is the
+ * always-on regression guard: the assertions match the constraint SEMANTICS
+ * (the 1..300 bound, the >= 0 bound, the specific FK targets and cascade, the
+ * partial-unique predicate) rather than merely the word "CHECK"/"UNIQUE", so a
+ * silent weakening — e.g. raising the 300-char cap, dropping the non-negative
+ * guard, or removing the one-vote unique — fails the test here.
+ *
+ * Requirements: 3.4, 4.3, 22.1, 23.3, 26.1
+ * Design: Data Models (`questions`, `question_votes`); Migrations and seed data.
+ */
+const QUESTIONS_FILE = '20260101000009_questions.sql';
+const QUESTIONS_INDEXES_FILE = '20260101000009_questions_indexes.sql';
+const QUESTION_VOTES_FILE = '20260101000010_question_votes.sql';
+const ADMIN_AUDIT_RLS_FILE = '20260101000008_admin_audit_rls.sql';
+
+describe('Milestone 2 schema / migrations (Q&A tables)', () => {
+  it('ships the Q&A migration files ordered so the schema builds from scratch', () => {
+    expect(migrationFiles).toContain(QUESTIONS_FILE);
+    expect(migrationFiles).toContain(QUESTIONS_INDEXES_FILE);
+    expect(migrationFiles).toContain(QUESTION_VOTES_FILE);
+    expect(migrationFiles).toContain(ADMIN_AUDIT_RLS_FILE);
+
+    const idx = (f: string) => migrationFiles.indexOf(f);
+    // Both Q&A migrations sort AFTER the last Milestone-1 migration (…000008),
+    // so the foundation tables/enums they build on already exist.
+    expect(idx(ADMIN_AUDIT_RLS_FILE)).toBeLessThan(idx(QUESTIONS_FILE));
+    expect(idx(ADMIN_AUDIT_RLS_FILE)).toBeLessThan(idx(QUESTION_VOTES_FILE));
+    // The questions table is created before its indexes reference it.
+    expect(idx(QUESTIONS_FILE)).toBeLessThan(idx(QUESTIONS_INDEXES_FILE));
+    // questions exists before question_votes, whose question_id FK targets it.
+    expect(idx(QUESTIONS_FILE)).toBeLessThan(idx(QUESTION_VOTES_FILE));
+    expect(idx(QUESTIONS_INDEXES_FILE)).toBeLessThan(idx(QUESTION_VOTES_FILE));
+  });
+
+  describe('question_status enum', () => {
+    it('defines question_status with exactly the five lifecycle values', () => {
+      const sql = flat[QUESTIONS_FILE];
+      const m = sql.match(/CREATE TYPE question_status AS ENUM \(([^)]*)\)/i);
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = [
+        'pending',
+        'approved',
+        'featured',
+        'answered',
+        'hidden',
+      ];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      // Exactly five values — no more were silently added/removed.
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+  });
+
+  describe('questions table', () => {
+    it('creates the questions table', () => {
+      expect(flat[QUESTIONS_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?questions \(/i,
+      );
+    });
+
+    it('declares every column the design requires', () => {
+      const sql = flat[QUESTIONS_FILE];
+      const expectedColumns = [
+        'id',
+        'event_id',
+        'text',
+        'status',
+        'vote_count',
+        'ai_category',
+        'ai_category_confidence',
+        'ai_prior_category',
+        'cluster_id',
+        'submission_key',
+        'created_at',
+        'updated_at',
+      ];
+      for (const col of expectedColumns) {
+        // Column name followed by a type token (uuid/text/integer/numeric/etc).
+        expect(sql).toMatch(new RegExp(`\\b${col}\\b\\s+\\w`, 'i'));
+      }
+    });
+
+    it('constrains text length to 1..300 characters (rejects empty and >300)', () => {
+      const sql = flat[QUESTIONS_FILE];
+      expect(sql).toMatch(
+        /CHECK\s*\(\s*char_length\(text\)\s+BETWEEN\s+1\s+AND\s+300\s*\)/i,
+      );
+    });
+
+    it('requires vote_count to be non-negative', () => {
+      const sql = flat[QUESTIONS_FILE];
+      expect(sql).toMatch(/CHECK\s*\(\s*vote_count\s*>=\s*0\s*\)/i);
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      const sql = flat[QUESTIONS_FILE];
+      // event_id uuid ... REFERENCES events (id) ON DELETE CASCADE
+      expect(sql).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[QUESTIONS_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+  });
+
+  describe('questions indexes migration', () => {
+    it('declares idx_questions_event on (event_id)', () => {
+      expect(flat[QUESTIONS_INDEXES_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_questions_event ON questions \(event_id\)/i,
+      );
+    });
+
+    it('declares idx_questions_status on (event_id, status)', () => {
+      expect(flat[QUESTIONS_INDEXES_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_questions_status ON questions \(event_id, status\)/i,
+      );
+    });
+
+    it('declares idx_questions_created on (event_id, created_at)', () => {
+      expect(flat[QUESTIONS_INDEXES_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_questions_created ON questions \(event_id, created_at\)/i,
+      );
+    });
+
+    it('declares idx_questions_votes on (event_id, vote_count DESC)', () => {
+      expect(flat[QUESTIONS_INDEXES_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_questions_votes ON questions \(event_id, vote_count DESC\)/i,
+      );
+    });
+
+    it('declares the partial UNIQUE (event_id, submission_key) WHERE submission_key IS NOT NULL', () => {
+      const sql = flat[QUESTIONS_INDEXES_FILE];
+      // A UNIQUE index on (event_id, submission_key) that is PARTIAL — enforced
+      // only where submission_key IS NOT NULL. The partial predicate is
+      // semantically essential (dropping it would break idempotency), so it is
+      // asserted explicitly rather than just matching "UNIQUE".
+      expect(sql).toMatch(
+        /CREATE UNIQUE INDEX (IF NOT EXISTS )?\w+ ON questions \(event_id, submission_key\)\s+WHERE submission_key IS NOT NULL/i,
+      );
+    });
+  });
+
+  describe('question_votes table', () => {
+    it('creates the question_votes table', () => {
+      expect(flat[QUESTION_VOTES_FILE]).toMatch(
+        /CREATE TABLE (IF NOT EXISTS )?question_votes \(/i,
+      );
+    });
+
+    it('enforces one vote per participant per question via a UNIQUE constraint', () => {
+      const sql = flat[QUESTION_VOTES_FILE];
+      // UNIQUE (participant_identifier, question_id) — the authoritative
+      // one-vote rule. Column order within the constraint is not significant
+      // for uniqueness, but both columns must be present.
+      expect(sql).toMatch(
+        /UNIQUE\s*\(\s*participant_identifier\s*,\s*question_id\s*\)/i,
+      );
+    });
+
+    it('references questions(id) via the question_id FK with ON DELETE CASCADE', () => {
+      const sql = flat[QUESTION_VOTES_FILE];
+      expect(sql).toMatch(
+        /question_id\s+uuid[^,]*REFERENCES\s+questions\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('references events(id) via the event_id FK with ON DELETE CASCADE', () => {
+      const sql = flat[QUESTION_VOTES_FILE];
+      expect(sql).toMatch(
+        /event_id\s+uuid[^,]*REFERENCES\s+events\s*\(\s*id\s*\)\s+ON DELETE CASCADE/i,
+      );
+    });
+
+    it('declares id as the primary key', () => {
+      expect(flat[QUESTION_VOTES_FILE]).toMatch(/\bid\b[^,]*PRIMARY KEY/i);
+    });
+
+    it('creates idx_votes_question on (question_id)', () => {
+      expect(flat[QUESTION_VOTES_FILE]).toMatch(
+        /CREATE INDEX (IF NOT EXISTS )?idx_votes_question ON question_votes \(question_id\)/i,
+      );
+    });
+  });
+});
