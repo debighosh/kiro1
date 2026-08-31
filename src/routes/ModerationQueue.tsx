@@ -11,6 +11,12 @@ import {
   type ModerationQuestion,
   type ModerationQuestionStatus,
 } from '../lib/moderation';
+import {
+  AiClientError,
+  overrideQuestionCategory,
+  runCategorisation,
+} from '../lib/aiClient';
+import { AI_QUESTION_CATEGORIES, type AiCategory } from '../schemas/ai';
 
 /**
  * `/admin/events/:id/moderation` — the admin moderation queue (Task 16.2).
@@ -39,12 +45,25 @@ import {
  *  - action buttons meet the ≥44×44px touch target (`.touch-target`) and are
  *    keyboard-navigable with the global `:focus-visible` ring.
  *
+ * AI categorisation (Task 34.2):
+ *  - an event-level "Categorise questions" action triggers the categorisation
+ *    JOB via the AI Gateway ({@link runCategorisation}); on success the queue is
+ *    re-read so newly-assigned categories appear. A busy `role="status"`
+ *    indicator and a sanitised error/degraded notice are shown (Req 24.7).
+ *  - a per-row moderator OVERRIDE control ({@link overrideQuestionCategory})
+ *    lets an admin set a question's AI category. The `<select>` is CONSTRAINED
+ *    to the eight allowed categories ({@link AI_QUESTION_CATEGORIES}) plus a
+ *    "No change" option, so an invalid category can never be chosen client-side.
+ *    Server-side the override records the prior category into `ai_prior_category`
+ *    (Req 15.7) and RETAINS the prior assignment on an invalid value (Req 15.8).
+ *
  * PRIVACY: `participant_identifier` is NEVER read (the lib does not select it)
  * and NEVER rendered (Req 8.6, 24.8).
  *
- * Requirements traceability: 3.11, 3.12, 24.7, 25.4.
+ * Requirements traceability: 3.11, 3.12, 15.7, 15.8, 24.7, 25.4.
  * Design references: Frontend Design (Route map — `/admin/events/:id/moderation`);
- * Components (`ModerationQueue`).
+ * Components (`ModerationQueue`); Server-Side AI Gateway Design (AI features —
+ * Categorisation).
  */
 
 /** Resolution state of the queue load (Req 24.7 four UX states). */
@@ -84,6 +103,7 @@ export function ModerationQueue(): JSX.Element {
   const statusFilterId = useId();
   const categoryFilterId = useId();
   const searchFilterId = useId();
+  const overrideSelectBaseId = useId();
 
   const [status, setStatus] = useState<QueueStatus>('loading');
   const [questions, setQuestions] = useState<ModerationQuestion[]>([]);
@@ -99,6 +119,21 @@ export function ModerationQueue(): JSX.Element {
   // Per-question action progress + inline error (keyed by question id).
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Per-question override selection ('' = "no change"), keyed by question id.
+  const [overrideSelection, setOverrideSelection] = useState<
+    Record<string, '' | AiCategory>
+  >({});
+  // The question whose override write is currently in flight (one at a time).
+  const [pendingOverrideId, setPendingOverrideId] = useState<string | null>(
+    null,
+  );
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+
+  // Event-level "Categorise questions" job progress + result/error.
+  const [categoriseBusy, setCategoriseBusy] = useState(false);
+  const [categoriseNotice, setCategoriseNotice] = useState<string | null>(null);
+  const [categoriseError, setCategoriseError] = useState<string | null>(null);
 
   const loadQueue = useCallback(async (): Promise<void> => {
     if (!eventId) {
@@ -167,6 +202,83 @@ export function ModerationQueue(): JSX.Element {
       setActionError(message);
     } finally {
       setPendingActionId(null);
+    }
+  }
+
+  /**
+   * Applies a MODERATOR OVERRIDE of a question's AI category (Req 15.7, 15.8).
+   * The selection is constrained to the eight allowed categories by the
+   * `<select>` options, so an invalid category can never be chosen here; the
+   * server ADDITIONALLY records the prior category into `ai_prior_category`
+   * (Req 15.7) and RETAINS the prior assignment on an invalid value (Req 15.8).
+   * On success the queue is re-read so the row reflects the new category.
+   */
+  async function handleOverride(questionId: string): Promise<void> {
+    if (pendingOverrideId || categoriseBusy) return;
+    const selected = overrideSelection[questionId];
+    // "No change" selected — nothing to apply.
+    if (!selected) return;
+
+    setPendingOverrideId(questionId);
+    setOverrideError(null);
+    try {
+      await overrideQuestionCategory({
+        questionId,
+        category: selected,
+        ...(eventId ? { eventId } : {}),
+      });
+      // Reset this row's selection back to "no change" and re-read the queue so
+      // the row shows its new AI category (and any concurrent changes).
+      setOverrideSelection((prev) => ({ ...prev, [questionId]: '' }));
+      await loadQueue();
+    } catch (error) {
+      const message =
+        error instanceof AiClientError
+          ? error.kind === 'not_implemented'
+            ? 'Overriding a category is not available yet.'
+            : error.message
+          : 'The category could not be updated. Please try again.';
+      setOverrideError(message);
+    } finally {
+      setPendingOverrideId(null);
+    }
+  }
+
+  /**
+   * Triggers the AI categorisation JOB for the event via the Gateway (task
+   * 30.1) and, on success, re-reads the queue so newly-assigned categories
+   * appear. AI being unavailable/degraded is a normal, non-error state that the
+   * core moderation flow is unaffected by (Req 19.1, 24.7).
+   */
+  async function handleCategorise(): Promise<void> {
+    if (!eventId || categoriseBusy || pendingOverrideId || pendingActionId) {
+      return;
+    }
+    setCategoriseBusy(true);
+    setCategoriseNotice(null);
+    setCategoriseError(null);
+    try {
+      const response = await runCategorisation(eventId);
+      if (!response.available) {
+        // Degraded — AI disabled / not configured / credential required.
+        setCategoriseNotice(response.unavailable.message);
+        return;
+      }
+      const { categorised_count, candidate_count } = response.summary;
+      setCategoriseNotice(
+        candidate_count === 0
+          ? 'There were no questions to categorise.'
+          : `Categorised ${categorised_count} of ${candidate_count} question${candidate_count === 1 ? '' : 's'}.`,
+      );
+      await loadQueue();
+    } catch (error) {
+      const message =
+        error instanceof AiClientError
+          ? error.message
+          : 'Categorising the questions could not be completed. Please try again.';
+      setCategoriseError(message);
+    } finally {
+      setCategoriseBusy(false);
     }
   }
 
@@ -242,7 +354,49 @@ export function ModerationQueue(): JSX.Element {
             className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
           />
         </div>
+
+        {/* Event-level AI categorisation action (Req 15.1, 24.7). */}
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            disabled={
+              categoriseBusy ||
+              pendingOverrideId !== null ||
+              pendingActionId !== null ||
+              !eventId
+            }
+            aria-busy={categoriseBusy || undefined}
+            onClick={() => void handleCategorise()}
+            className="touch-target self-start rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+          >
+            Categorise questions
+          </button>
+        </div>
       </section>
+
+      {/* Categorisation busy indicator + result/error (Req 24.7). */}
+      {categoriseBusy ? (
+        <p role="status" aria-live="polite" className="mt-4 text-ink-muted">
+          Categorising the questions…
+        </p>
+      ) : null}
+      {categoriseNotice && !categoriseBusy ? (
+        <p role="status" aria-live="polite" className="mt-4 text-ink">
+          {categoriseNotice}
+        </p>
+      ) : null}
+      {categoriseError ? (
+        <p role="alert" className="mt-4 text-ink">
+          {categoriseError}
+        </p>
+      ) : null}
+
+      {/* An override-level error surfaced separately (Req 15.7, 15.8). */}
+      {overrideError ? (
+        <p role="alert" className="mt-4 text-ink">
+          {overrideError}
+        </p>
+      ) : null}
 
       {/* An action-level error (e.g. session expiry) surfaced separately. */}
       {actionError ? (
@@ -338,6 +492,67 @@ export function ModerationQueue(): JSX.Element {
                     Applying…
                   </span>
                 ) : null}
+
+                {/* Moderator category OVERRIDE — constrained to the 8 allowed
+                    categories so an invalid category cannot be chosen; the
+                    server records the prior category (Req 15.7) and retains it
+                    on an invalid selection (Req 15.8). */}
+                {(() => {
+                  const overrideSelectId = `${overrideSelectBaseId}-${q.id}`;
+                  const selected = overrideSelection[q.id] ?? '';
+                  const isOverrideBusy = pendingOverrideId === q.id;
+                  return (
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-end">
+                      <div className="flex flex-col gap-1">
+                        <label
+                          htmlFor={overrideSelectId}
+                          className="text-sm font-medium text-ink"
+                        >
+                          Override AI category
+                        </label>
+                        <select
+                          id={overrideSelectId}
+                          value={selected}
+                          disabled={isOverrideBusy || categoriseBusy}
+                          onChange={(e) =>
+                            setOverrideSelection((prev) => ({
+                              ...prev,
+                              [q.id]: e.target.value as '' | AiCategory,
+                            }))
+                          }
+                          className="touch-target rounded border border-ink-muted px-3 py-2 text-ink disabled:opacity-60"
+                        >
+                          <option value="">No change</option>
+                          {AI_QUESTION_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={
+                          selected === '' || isOverrideBusy || categoriseBusy
+                        }
+                        aria-busy={isOverrideBusy || undefined}
+                        onClick={() => void handleOverride(q.id)}
+                        className="touch-target self-start rounded border border-ink-muted px-3 py-2 font-medium text-ink disabled:opacity-60"
+                      >
+                        Apply category
+                      </button>
+                      {isOverrideBusy ? (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          className="text-sm text-ink-muted"
+                        >
+                          Updating category…
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </li>
             );
           })}

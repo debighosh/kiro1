@@ -95,6 +95,24 @@ vi.mock('../lib/presenter', () => ({
     ].includes(v),
 }));
 
+// task 34.3: `./screens` also imports `../lib/aiClient` (for the presenter
+// `ai_themes` mode + the moderation-queue categorisation), which transitively
+// loads the real supabase client and throws without VITE_ env vars. Stub the
+// surface so importing the screen stays env/network-free.
+vi.mock('../lib/aiClient', () => ({
+  runThemeInsights: vi.fn().mockResolvedValue({
+    available: true,
+    insights: {
+      top_themes: [],
+      emerging_concerns: [],
+      frequent_topics: [],
+      notable_high_vote_questions: [],
+      has_data: false,
+    },
+  }),
+  AiClientError: class AiClientError extends Error {},
+}));
+
 // `./screens` also mounts `QuestionSubmissionForm` into the audience event view
 // (task 15.1), which imports `../lib/questions`; that transitively loads the
 // real supabase client and throws without VITE_ env vars. This test only

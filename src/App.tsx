@@ -9,6 +9,8 @@ import {
   AdminDashboard,
   AdminEventEditor,
   ModerationQueue,
+  AiSettings,
+  AiSummary,
   PresenterView,
   NotFound,
 } from './routes';
@@ -85,6 +87,9 @@ function App(): JSX.Element {
           }
         >
           <Route path="/admin" element={<AdminDashboard />} />
+          {/* AI provider settings/config (task 34.1). Admin-only, inside the
+              RequireAuth-guarded block. */}
+          <Route path="/admin/ai-settings" element={<AiSettings />} />
           {/* Event editor: `/admin/events/new` is CREATE mode; an existing id
               is (minimal) EDIT mode. The `new` route is registered explicitly
               for clarity, and `:id` still matches it as a fallback (task 8.1). */}
@@ -96,6 +101,13 @@ function App(): JSX.Element {
           <Route
             path="/admin/events/:id/moderation"
             element={<ModerationQueue />}
+          />
+          {/* End-of-event summary (task 34.4). Admin-only, inside the
+              RequireAuth-guarded block; the more specific `/summary` path is
+              registered before the `:id` editor for clarity. */}
+          <Route
+            path="/admin/events/:id/summary"
+            element={<AiSummary />}
           />
           <Route path="/admin/events/:id" element={<AdminEventEditor />} />
         </Route>
