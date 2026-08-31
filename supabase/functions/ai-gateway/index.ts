@@ -65,6 +65,7 @@ import { runConnectionTest } from './connectionTest.ts';
 import { runCategorisation } from './jobs/categorisation.ts';
 import { runClustering } from './jobs/clustering.ts';
 import { runThemeInsights } from './jobs/themeInsights.ts';
+import { runSummary } from './jobs/summary.ts';
 
 // -----------------------------------------------------------------------------
 // Request contract (wire body → GatewayRequest).
@@ -505,6 +506,60 @@ Deno.serve(async (req: Request): Promise<Response> => {
         job_type: gatewayRequest.jobType,
         question_count: themeInsights.question_count,
         error: themeInsights.error,
+      },
+      502,
+    );
+  }
+
+  // `summary` (task 33.1) has a DEDICATED path: it LOADS the event's questions,
+  // polls, and word-cloud results from the DB and computes ALL "Calculated Data"
+  // (interaction counts, top questions ≤10 by descending votes with earliest-
+  // submission tie-break, themes/categories, poll/word-cloud results, answered
+  // and follow-up counts) INDEPENDENTLY of the model (Req 18.1, 18.2, 18.4). It
+  // then ATTEMPTS the AI interpretation (executive summary + follow-up actions)
+  // via the VALIDATED runner against `aiSummaryResultSchema`; on success it
+  // assembles the full Markdown with a "## Calculated Data" section and a
+  // SEPARATE "## AI Interpretation" section whose AI content is prefixed
+  // "AI-Generated" (Req 18.5, 18.6). If the AI is unavailable/fails, it STILL
+  // produces the calculated sections plus a visible notice that AI content could
+  // not be produced and returns success — the calculated report is ALWAYS
+  // produced (Req 18.7, 19.1). Targets ≤30 s (Req 18.3).
+  if (gatewayRequest.jobType === 'summary') {
+    const summary = await runSummary(
+      admin,
+      activeConfig,
+      gatewayRequest,
+      recorder,
+    );
+    if (summary.ok) {
+      return jsonResponse(
+        req,
+        {
+          ai: { available: true },
+          job_id: recorder.jobId,
+          job_type: gatewayRequest.jobType,
+          question_count: summary.question_count,
+          // Whether the AI Interpretation section carries AI-Generated content
+          // or the visible "AI content could not be produced" notice (Req 18.7).
+          ai_interpretation_available: summary.ai_available,
+          // Req 14.8: the SPA renders the report as PLAIN TEXT / inert Markdown —
+          // every AI-produced string is already plain-text escaped.
+          summary_markdown: summary.markdown,
+        },
+        200,
+      );
+    }
+    // The event could not be resolved (missing / not found) — the calculated
+    // report cannot be produced. The sanitised error carries no provider
+    // internals; the core flow is unaffected (Req 19.1).
+    return jsonResponse(
+      req,
+      {
+        ai: { available: true },
+        job_id: recorder.jobId,
+        job_type: gatewayRequest.jobType,
+        question_count: summary.question_count,
+        error: summary.error,
       },
       502,
     );
