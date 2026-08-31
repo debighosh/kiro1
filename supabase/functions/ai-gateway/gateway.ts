@@ -58,6 +58,10 @@ import {
 } from './ssrf.ts';
 import { ProviderCallError, callChatCompletion } from './adapter.ts';
 import {
+  RestrictedDataError,
+  assertNoParticipantIdentifiers,
+} from './payloadGuard.ts';
+import {
   MAX_STRUCTURED_OUTPUT_ATTEMPTS,
   type ValidationFailureReason,
   isStructuredOutputJobType,
@@ -352,6 +356,7 @@ export type SanitisedErrorCode =
   | 'timeout'
   | 'credential_resolution_failed'
   | 'disallowed_destination'
+  | 'restricted_data'
   | 'provider_not_implemented'
   | 'provider_error'
   | 'invalid_ai_response'
@@ -364,6 +369,11 @@ const SANITISED_ERROR_MESSAGE: Readonly<Record<SanitisedErrorCode, string>> = {
   // SSRF denial (Req 13.9): a fixed category only — never the hostname, the
   // resolved IP, or a raw diagnostic (Req 13.1, 13.10).
   disallowed_destination: 'The AI destination is not allowed.',
+  // Pre-transmission identifier guard denial (Req 20.2): the built payload was
+  // found to contain a participant-identifier shape, so transmission was blocked
+  // and no request was dispatched. A fixed category only — never the offending
+  // value or which identifier it was beyond the category (Req 20.7).
+  restricted_data: 'The AI request contained restricted participant data.',
   provider_not_implemented: 'AI provider call is not yet implemented.',
   provider_error: 'The AI provider returned an error.',
   // Structured-output validation failure after bounded retries (Req 14.4, 14.6,
@@ -401,6 +411,10 @@ export function sanitiseError(err: unknown): {
   } else if (err instanceof DisallowedDestinationError) {
     // Req 13.9, 13.10 — collapse to the fixed disallowed-destination category.
     code = 'disallowed_destination';
+  } else if (err instanceof RestrictedDataError) {
+    // Req 20.2 — the pre-transmission guard detected a participant identifier;
+    // collapse to the fixed restricted-data category (never the offending value).
+    code = 'restricted_data';
   } else if (err instanceof ProviderNotImplementedError) {
     code = 'provider_not_implemented';
   } else if (err instanceof ProviderCallError) {
@@ -678,6 +692,10 @@ export function runPreflightedProviderCall(
 ): Promise<ProviderCallResult> {
   const timeoutMs = resolveTimeoutMs(config.requestTimeoutSeconds);
   return (async () => {
+    // Defence-in-depth pre-transmission guard (Req 20.2): block the outbound
+    // call if the built payload carries any participant identifier. Throws
+    // `RestrictedDataError` before the preflight — no request is dispatched.
+    assertNoParticipantIdentifiers(payload);
     const preflight: PreflightResult = await preflightDestination(
       config.baseUrl + config.chatCompletionsPath,
     );
@@ -704,6 +722,19 @@ export async function runSingleAttempt(
   const timeoutMs = resolveTimeoutMs(config.requestTimeoutSeconds);
 
   try {
+    // -------------------------------------------------------------------------
+    // PRE-TRANSMISSION IDENTIFIER GUARD (task 34/35, Req 20.2).
+    //
+    // DEFENCE-IN-DEPTH on top of the by-construction minimisation of
+    // `buildMinimalPayload` (Req 20.1, 20.3): scan the ALREADY-BUILT payload for
+    // participant-identifier shapes (email / phone / IP / user id) that might
+    // have been embedded inside a question text or metadata value. If any is
+    // detected this throws `RestrictedDataError` HERE — BEFORE the SSRF preflight
+    // or ANY outbound connection — so transmission is blocked and no request is
+    // sent; `sanitiseError` collapses it to the `restricted_data` category that
+    // `recorder.markFailed` records (Req 20.2, 20.7).
+    // -------------------------------------------------------------------------
+    assertNoParticipantIdentifiers(payload);
     // -------------------------------------------------------------------------
     // SSRF PREFLIGHT SEAM (task 29.2, Req 13.4, 13.6-13.9, 13.12).
     //
