@@ -61,6 +61,7 @@ import {
   startAiJob,
 } from './gateway.ts';
 import { isStructuredOutputJobType } from './structuredOutput.ts';
+import { classifyFailureMode } from './degradedMode.ts';
 import { runConnectionTest } from './connectionTest.ts';
 import { runCategorisation } from './jobs/categorisation.ts';
 import { runClustering } from './jobs/clustering.ts';
@@ -238,6 +239,12 @@ function degradedResponse(req: Request, reason: DegradedReason): Response {
       ai: {
         available: false,
         reason,
+        // The Req 19.1 failure-MODE the SPA control renders as its "AI
+        // unavailable" indication (Req 19.2) — a fixed category derived from the
+        // degraded reason via the shared degraded-mode policy, so a pre-call
+        // degraded state and a post-call failure classify through the SAME
+        // taxonomy. No provider internals.
+        mode: classifyFailureMode(reason),
         message: DEGRADED_MESSAGE[reason],
       },
     },

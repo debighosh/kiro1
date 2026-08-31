@@ -64,6 +64,11 @@ import {
   shouldRetryAfterValidationFailure,
   validateStructuredOutput,
 } from './structuredOutput.ts';
+import {
+  backoffDelay,
+  planManualRetry,
+  shouldAutoRetry,
+} from './degradedMode.ts';
 
 // -----------------------------------------------------------------------------
 // Request contract (job_type + event_id + inputs).
@@ -859,7 +864,14 @@ export async function runValidatedOperation(
     // Validation failure (no_json / invalid_json / schema_violation) → do NOT
     // store; retry if the bounded cap allows (Req 14.4, 14.6, 14.7, 19.3).
     lastValidationReason = validation.reason;
-    if (!shouldRetryAfterValidationFailure(attemptCount)) {
+    // The validation-retry cap and the degraded-mode automatic-retry cap are the
+    // SAME "max 3 per operation" bound (MAX_STRUCTURED_OUTPUT_ATTEMPTS ===
+    // MAX_AI_AUTOMATIC_ATTEMPTS); we require BOTH predicates to agree before
+    // retrying so the two policies can never diverge (Req 14.6, 19.3).
+    if (
+      !shouldRetryAfterValidationFailure(attemptCount) ||
+      !shouldAutoRetry(attemptCount)
+    ) {
       // All attempts exhausted → reject WITHOUT storing, leave prior data
       // unchanged, record the FINAL attempt_count and a recoverable, sanitised
       // validation error (Req 14.4, 14.6). The specific `reason` is intentionally
@@ -871,7 +883,13 @@ export async function runValidatedOperation(
       await recorder.markFailed(attemptCount, error.message, config.modelId);
       return { ok: false, error, attemptCount };
     }
-    // else: loop and retry with an incremented attempt_count.
+    // EXPONENTIAL BACKOFF between the bounded automatic retries (Req 19.3):
+    // wait computeBackoffDelayMs(attemptCount) before the next attempt so we do
+    // not hammer the provider (no aggressive quota exhaustion). The delay is
+    // bounded (capped) and, at attempt 1/2 with the current tuning, stays well
+    // within the per-feature latency envelopes. Then loop and retry with an
+    // incremented attempt_count.
+    await backoffDelay(attemptCount);
   }
 
   // Unreachable in practice (the loop returns on the final attempt), but keeps
@@ -891,4 +909,78 @@ export async function runValidatedOperation(
     error,
     attemptCount: MAX_STRUCTURED_OUTPUT_ATTEMPTS,
   };
+}
+
+
+// -----------------------------------------------------------------------------
+// Manual retry entry point (task 33.2, Req 19.4).
+//
+// After the bounded automatic retries in `runValidatedOperation` are exhausted,
+// automatic retries STOP (Req 19.3). An administrator may then initiate a MANUAL
+// retry of the operation, which — per Req 19.4 — executes EXACTLY ONE attempt and
+// reports its outcome (no further automatic retries chain off it). This is the
+// SAME egress + server-side structured-output validation as a single automatic
+// attempt, just without the auto-retry loop: the manual-retry POLICY
+// (`planManualRetry()` → { attempts: 1, allowsAutomaticRetry: false }) is the
+// pure specification this honours.
+//
+// It reuses `runSingleAttempt` (one SSRF-preflighted, credential-resolved,
+// hard-timeout provider call, recorded in `ai_jobs`) and then validates the
+// candidate JSON exactly once. On validation failure it does NOT retry — it
+// records the terminal failure and returns the recoverable `invalid_ai_response`.
+// The initiating control renders the outcome within 2 s (Req 19.4); a failure
+// carries only the sanitised, provider-internal-free indication (Req 19.2) and
+// leaves all prior approved moderation decisions / valid AI results unchanged,
+// persisting no partial output (Req 19.5, 19.6).
+// -----------------------------------------------------------------------------
+
+/**
+ * Executes a MANUAL retry of a structured-output AI operation: EXACTLY ONE
+ * attempt, NO automatic retry (Req 19.4). Same validation contract as an
+ * automatic attempt; on failure returns the recoverable sanitised error with
+ * `attemptCount = 1` (the single manual attempt) and never mutates prior data.
+ */
+export async function runManualRetry(
+  config: ActiveProviderConfig,
+  request: GatewayRequest,
+  recorder: AiJobRecorder,
+): Promise<ValidatedRunOutcome> {
+  // The manual-retry policy: a single attempt, no auto-retry (Req 19.4). We
+  // assert the plan here so the intent is explicit and the value is exercised.
+  const plan = planManualRetry();
+
+  // Guard: this runner is for structured-output job types only (Req 14.2) —
+  // mirrors `runValidatedOperation`.
+  if (!isStructuredOutputJobType(request.jobType)) {
+    const error = sanitiseError(new Error('unsupported job type'));
+    await recorder.markFailed(plan.attempts, error.message, config.modelId);
+    return { ok: false, error, attemptCount: plan.attempts };
+  }
+
+  // EXACTLY ONE attempt (plan.attempts === 1, Req 19.4).
+  const outcome = await runSingleAttempt(config, request, recorder, plan.attempts);
+
+  // A transport/timeout/SSRF failure is terminal and already recorded — surface
+  // it unchanged; no automatic retry follows a manual retry (Req 19.4, 19.1).
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.error, attemptCount: plan.attempts };
+  }
+
+  // Validate the single response server-side BEFORE any storing (Req 14.2).
+  const validation = validateStructuredOutput(request.jobType, outcome.result.text);
+  if (validation.valid) {
+    await recorder.markSucceeded(plan.attempts, config.modelId);
+    return { ok: true, result: { data: validation.data, attemptCount: plan.attempts } };
+  }
+
+  // Validation failed on the single manual attempt → do NOT retry (Req 19.4),
+  // do NOT store (Req 19.6), leave prior data unchanged (Req 19.5); record the
+  // terminal recoverable failure with the sanitised, provider-internal-free
+  // category (Req 19.2).
+  const error = {
+    code: 'invalid_ai_response' as SanitisedErrorCode,
+    message: SANITISED_ERROR_MESSAGE.invalid_ai_response,
+  };
+  await recorder.markFailed(plan.attempts, error.message, config.modelId);
+  return { ok: false, error, attemptCount: plan.attempts };
 }
