@@ -13,6 +13,10 @@ import {
   type EventCreateInput,
   type ModerationMode,
 } from '../schemas/event';
+import { cx, FOCUS_RING } from '../lib/a11y';
+// Req 24.6: no JS-driven animation in this form; the global CSS
+// `@media (prefers-reduced-motion: reduce)` rule in index.css covers all CSS
+// transitions. No JS animation guard is needed in this component.
 
 /**
  * `/admin/events/:id` — the admin event editor (Task 8.1).
@@ -223,7 +227,10 @@ export function AdminEventEditor(): JSX.Element {
             Audience link
           </h2>
           <p className="mt-1 break-all text-ink">
-            <a href={result.audienceUrl} className="underline">
+            <a
+              href={result.audienceUrl}
+              className={cx('underline', FOCUS_RING)}
+            >
               {result.audienceUrl}
             </a>
           </p>
@@ -241,7 +248,10 @@ export function AdminEventEditor(): JSX.Element {
             Keep this private — it grants presenter access.
           </p>
           <p className="mt-1 break-all text-ink">
-            <a href={result.presenterUrl} className="underline">
+            <a
+              href={result.presenterUrl}
+              className={cx('underline', FOCUS_RING)}
+            >
               {result.presenterUrl}
             </a>
           </p>
@@ -254,7 +264,10 @@ export function AdminEventEditor(): JSX.Element {
             setValues(EMPTY_FORM);
             setStatus('idle');
           }}
-          className="touch-target mt-8 rounded bg-focus px-4 py-2 font-medium text-surface"
+          className={cx(
+            'touch-target mt-8 rounded bg-focus px-4 py-2 font-medium text-surface',
+            FOCUS_RING,
+          )}
         >
           Create another event
         </button>
@@ -299,7 +312,10 @@ export function AdminEventEditor(): JSX.Element {
             disabled={isSubmitting}
             aria-invalid={nameError ? true : undefined}
             aria-describedby={nameError ? `${nameId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {nameError ? (
             <p id={`${nameId}-error`} role="alert" className="text-ink">
@@ -325,7 +341,10 @@ export function AdminEventEditor(): JSX.Element {
             aria-describedby={
               descriptionError ? `${descriptionId}-error` : undefined
             }
-            className="rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {descriptionError ? (
             <p id={`${descriptionId}-error`} role="alert" className="text-ink">
@@ -350,7 +369,10 @@ export function AdminEventEditor(): JSX.Element {
             disabled={isSubmitting}
             aria-invalid={slugError ? true : undefined}
             aria-describedby={slugError ? `${slugId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {slugError ? (
             <p id={`${slugId}-error`} role="alert" className="text-ink">
@@ -374,7 +396,10 @@ export function AdminEventEditor(): JSX.Element {
             disabled={isSubmitting}
             aria-invalid={startsAtError ? true : undefined}
             aria-describedby={startsAtError ? `${startsAtId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {startsAtError ? (
             <p id={`${startsAtId}-error`} role="alert" className="text-ink">
@@ -397,7 +422,10 @@ export function AdminEventEditor(): JSX.Element {
             disabled={isSubmitting}
             aria-invalid={endsAtError ? true : undefined}
             aria-describedby={endsAtError ? `${endsAtId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {endsAtError ? (
             <p id={`${endsAtId}-error`} role="alert" className="text-ink">
@@ -425,7 +453,10 @@ export function AdminEventEditor(): JSX.Element {
             aria-describedby={
               brandColourError ? `${brandColourId}-error` : undefined
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {brandColourError ? (
             <p id={`${brandColourId}-error`} role="alert" className="text-ink">
@@ -447,7 +478,10 @@ export function AdminEventEditor(): JSX.Element {
               update('moderationMode', e.target.value as ModerationMode)
             }
             disabled={isSubmitting}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           >
             <option value="pre">Pre-moderation (approve before showing)</option>
             <option value="post">
@@ -467,7 +501,10 @@ export function AdminEventEditor(): JSX.Element {
           type="submit"
           disabled={isSubmitting}
           aria-busy={isSubmitting}
-          className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+          className={cx(
+            'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+            FOCUS_RING,
+          )}
         >
           {isSubmitting ? 'Creating…' : 'Create event'}
         </button>

@@ -17,6 +17,13 @@ import {
   runCategorisation,
 } from '../lib/aiClient';
 import { AI_QUESTION_CATEGORIES, type AiCategory } from '../schemas/ai';
+import { cx, FOCUS_RING, statusIndicator } from '../lib/a11y';
+// Req 24.6: no JS-driven animation in this component; the global CSS
+// `@media (prefers-reduced-motion: reduce)` rule in index.css covers all CSS
+// transitions. No JS animation guard is needed here.
+// Req 24.8: `participant_identifier` is never selected nor rendered by the
+// moderation helpers; only question text, status, vote count, and AI category
+// flow through this component.
 
 /**
  * `/admin/events/:id/moderation` — the admin moderation queue (Task 16.2).
@@ -84,6 +91,18 @@ const STATUS_LABELS: Readonly<Record<ModerationQuestionStatus, string>> = {
   featured: 'Featured',
   answered: 'Answered',
   hidden: 'Hidden',
+};
+
+/**
+ * Maps each question status to a non-colour indicator icon (Req 24.4). These
+ * icons augment the text label so status is never conveyed by colour alone.
+ */
+const STATUS_ICONS: Readonly<Record<ModerationQuestionStatus, string>> = {
+  pending: statusIndicator('info').icon, // ℹ — awaiting review
+  approved: statusIndicator('success').icon, // ✓ — visible to audience
+  featured: statusIndicator('success').icon, // ✓ — prominently shown
+  answered: statusIndicator('success').icon, // ✓ — answered
+  hidden: statusIndicator('warning').icon, // ⚠ — not visible
 };
 
 /** The action that would be a no-op for a question already in a given status. */
@@ -308,7 +327,10 @@ export function ModerationQueue(): JSX.Element {
             onChange={(e) =>
               setStatusFilter(e.target.value as '' | ModerationQuestionStatus)
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           >
             <option value="">All statuses</option>
             {MODERATION_QUESTION_STATUSES.map((s) => (
@@ -328,7 +350,10 @@ export function ModerationQueue(): JSX.Element {
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             disabled={availableCategories.length === 0}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink disabled:opacity-60"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink disabled:opacity-60',
+              FOCUS_RING,
+            )}
           >
             <option value="">All categories</option>
             {availableCategories.map((c) => (
@@ -351,7 +376,10 @@ export function ModerationQueue(): JSX.Element {
             placeholder="Find in question text…"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
         </div>
 
@@ -367,7 +395,10 @@ export function ModerationQueue(): JSX.Element {
             }
             aria-busy={categoriseBusy || undefined}
             onClick={() => void handleCategorise()}
-            className="touch-target self-start rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+            className={cx(
+              'touch-target self-start rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+              FOCUS_RING,
+            )}
           >
             Categorise questions
           </button>
@@ -421,7 +452,10 @@ export function ModerationQueue(): JSX.Element {
           <button
             type="button"
             onClick={() => void loadQueue()}
-            className="touch-target self-start rounded bg-focus px-4 py-2 font-medium text-surface"
+            className={cx(
+              'touch-target self-start rounded bg-focus px-4 py-2 font-medium text-surface',
+              FOCUS_RING,
+            )}
           >
             Try again
           </button>
@@ -448,7 +482,9 @@ export function ModerationQueue(): JSX.Element {
                 className="flex flex-col gap-3 rounded border border-ink-muted p-4"
               >
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Status badge: text label + non-colour icon (Req 24.4). */}
                   <span className="rounded bg-surface px-2 py-1 text-sm font-medium text-ink ring-1 ring-ink-muted">
+                    <span aria-hidden="true">{STATUS_ICONS[q.status]} </span>
                     {STATUS_LABELS[q.status]}
                   </span>
                   {q.ai_category ? (
@@ -475,7 +511,10 @@ export function ModerationQueue(): JSX.Element {
                         disabled={isRowBusy || isNoOp}
                         aria-busy={isRowBusy || undefined}
                         onClick={() => void handleAction(q.id, action)}
-                        className="touch-target rounded border border-ink-muted px-3 py-2 font-medium text-ink disabled:opacity-60"
+                        className={cx(
+                          'touch-target rounded border border-ink-muted px-3 py-2 font-medium text-ink disabled:opacity-60',
+                          FOCUS_RING,
+                        )}
                       >
                         {ACTION_LABELS[action]}
                       </button>
@@ -520,7 +559,10 @@ export function ModerationQueue(): JSX.Element {
                               [q.id]: e.target.value as '' | AiCategory,
                             }))
                           }
-                          className="touch-target rounded border border-ink-muted px-3 py-2 text-ink disabled:opacity-60"
+                          className={cx(
+                            'touch-target rounded border border-ink-muted px-3 py-2 text-ink disabled:opacity-60',
+                            FOCUS_RING,
+                          )}
                         >
                           <option value="">No change</option>
                           {AI_QUESTION_CATEGORIES.map((c) => (
@@ -537,7 +579,10 @@ export function ModerationQueue(): JSX.Element {
                         }
                         aria-busy={isOverrideBusy || undefined}
                         onClick={() => void handleOverride(q.id)}
-                        className="touch-target self-start rounded border border-ink-muted px-3 py-2 font-medium text-ink disabled:opacity-60"
+                        className={cx(
+                          'touch-target self-start rounded border border-ink-muted px-3 py-2 font-medium text-ink disabled:opacity-60',
+                          FOCUS_RING,
+                        )}
                       >
                         Apply category
                       </button>

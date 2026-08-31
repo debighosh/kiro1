@@ -329,6 +329,18 @@ function toPollError(error: { message?: string } | null): PollError {
  * moves the count from the old option to the new so exactly one response
  * remains (Req 5.7, 5.8).
  *
+ * NO INPUT SANITISATION HERE (defence-in-depth note, task 39.3): the
+ * participant poll RESPONSE carries NO free text — it is only a poll id and a
+ * chosen option id (both opaque uuids). There is therefore nothing to run the
+ * shared {@link sanitise} allow-list guard against on this path (contrast the
+ * free-text question/word-cloud submit helpers, which DO apply it as an extra
+ * client-side line of defence — Req 21.9, 21.11, 21.12, 22.7). Poll OPTION /
+ * QUESTION text is ADMIN-authored and validated at poll-creation time (the
+ * authoritative DB CHECK constraints + the authenticated create path), not at
+ * participant response time, so participant-path sanitisation does not apply
+ * here. The server RPC's `invalid_option` gate remains the authoritative check
+ * that the submitted option id belongs to the poll.
+ *
  * @param pollId   The id of the poll to respond to.
  * @param optionId The id of the chosen option (must belong to the poll).
  * @throws {PollError} on an RPC rejection signal or a transport failure.

@@ -15,3 +15,7 @@ export * from './questions';
 export * from './polls';
 export * from './wordcloud';
 export * from './wordCloudClient';
+export * from './exports';
+export * from './download';
+export * from './summaryExport';
+export * from './analytics';

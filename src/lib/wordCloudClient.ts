@@ -22,6 +22,15 @@
  *     FIRST for fast feedback, avoiding an obviously-doomed round-trip; the RPC
  *     re-validates authoritatively so this is defence-in-depth only, mirroring
  *     how `questions.ts` validates 1–300 first.
+ *   - Alongside the length check, the shared {@link sanitise} allow-list guard
+ *     (`./sanitise`, task 39.2) is applied to the response text as an
+ *     ADDITIONAL client-side line of defence-in-depth (Req 21.9, 21.11, 21.12,
+ *     22.7): a disallowed (e.g. control) character rejects the WHOLE submission
+ *     with a user-safe {@link WordCloudClientError} of kind `invalid_length`
+ *     (no RPC call), and the caller retains the entered values. The DB CHECK +
+ *     RPC remain authoritative; the `maxLength` passed is the field's EXACT DB
+ *     limit ({@link WORD_CLOUD_TEXT_MAX} = 50), NOT the module-level default of
+ *     500.
  *
  * The RPC signature (supabase/migrations/20260101000026_word_cloud_respond_rpc.sql):
  *   submit_word_cloud_response(
@@ -42,13 +51,17 @@
  * it is NEVER accepted from callers and NEVER returned. Likewise the active
  * prompt read NEVER selects any participant data.
  *
- * Requirements traceability: 6.6, 6.7, 6.8, 6.10, 24.7, 2.8.
- * Design references: Components (`WordCloudCard`); Request/data flows (Word
- * cloud — one response per participant, updatable while open).
+ * Requirements traceability: 6.6, 6.7, 6.8, 6.10, 24.7, 2.8, 21.9, 21.11,
+ * 21.12, 22.7.
+ * Design references: Components (`WordCloudCard`); Error Handling (Validation
+ * errors — shared schemas; allow-list + length cap before persistence, reject
+ * whole submission with field + limit); Request/data flows (Word cloud — one
+ * response per participant, updatable while open).
  */
 
 import { supabase } from './supabaseClient';
 import { getParticipantIdentifier } from './participant';
+import { sanitise, PLAIN_TEXT_ALLOW_LIST } from './sanitise';
 
 /** The lifecycle status of a word-cloud prompt (mirrors the `wordcloud_status` enum). */
 export type WordCloudStatus = 'draft' | 'open' | 'closed';
@@ -285,11 +298,18 @@ function toWordCloudError(
  *  1. Validate length 1–50 Unicode code points client-side for fast feedback
  *     (Req 6.8). On failure, throw a {@link WordCloudClientError} of kind
  *     `invalid_length` — no RPC call is made.
- *  2. Resolve the opaque participant identifier via
+ *  2. Apply the shared {@link sanitise} allow-list guard to the trimmed text as
+ *     defence-in-depth (Req 21.9, 21.11, 21.12, 22.7). The `maxLength` passed is
+ *     the field's EXACT DB limit ({@link WORD_CLOUD_TEXT_MAX} = 50), NOT the
+ *     module-level default of 500. A `disallowed_char` failure rejects the
+ *     WHOLE submission with an `invalid_length`-kind {@link WordCloudClientError}
+ *     and NO RPC call, so the caller retains the entered values (Req 21.11,
+ *     22.7).
+ *  3. Resolve the opaque participant identifier via
  *     {@link getParticipantIdentifier} (NEVER accepted from the caller, NEVER
  *     returned — Req 8.6).
- *  3. Call `supabase.rpc('submit_word_cloud_response', …)` with the trimmed text.
- *  4. On success resolve; on the RPC's signalled rejection map it to a typed
+ *  4. Call `supabase.rpc('submit_word_cloud_response', …)` with the trimmed text.
+ *  5. On success resolve; on the RPC's signalled rejection map it to a typed
  *     {@link WordCloudClientError}.
  *
  * The RPC upserts on the `(participant_identifier, prompt_id)` unique key, so a
@@ -300,35 +320,51 @@ function toWordCloudError(
  *
  * @param promptId The id of the open word-cloud prompt to respond to.
  * @param rawText The participant's raw response text (validated to 1–50 code points).
- * @throws {WordCloudClientError} on client-side length failure, an RPC rejection
- *   signal, or a transport failure.
+ * @throws {WordCloudClientError} on a client-side length or allow-list failure,
+ *   an RPC rejection signal, or a transport failure.
  */
 export async function submitWordCloudResponse(
   promptId: string,
   rawText: string,
 ): Promise<void> {
   // 1) Client-side length validation (fast feedback; the RPC re-validates).
+  //    Kept FIRST so an over/under-length value yields the canonical message.
   if (!isValidWordCloudLength(rawText)) {
     throw new WordCloudClientError(WORD_CLOUD_LENGTH_MESSAGE, {
       kind: 'invalid_length',
     });
   }
 
-  // 2) Opaque participant identifier (derived internally; never rendered).
-  const participantIdentifier = getParticipantIdentifier();
-
   // Send the trimmed text so leading/trailing whitespace does not count toward
   // the stored length (consistent with the length check above and the RPC's btrim).
   const trimmed = rawText.trim();
 
-  // 3) Invoke the RPC.
+  // 2) Allow-list sanitisation as defence-in-depth (Req 21.9, 21.11, 21.12,
+  //    22.7) — reject the whole submission (no RPC) on a disallowed character.
+  //    Pass the field's EXACT DB limit (50), not the module-level 500 default.
+  //    The DB CHECK + RPC remain authoritative.
+  const sanitiseResult = sanitise(trimmed, {
+    field: 'word',
+    maxLength: WORD_CLOUD_TEXT_MAX,
+    allowList: PLAIN_TEXT_ALLOW_LIST,
+  });
+  if (!sanitiseResult.ok) {
+    throw new WordCloudClientError(WORD_CLOUD_LENGTH_MESSAGE, {
+      kind: 'invalid_length',
+    });
+  }
+
+  // 3) Opaque participant identifier (derived internally; never rendered).
+  const participantIdentifier = getParticipantIdentifier();
+
+  // 4) Invoke the RPC.
   const { error } = await supabase.rpc(SUBMIT_WORD_CLOUD_RESPONSE_RPC, {
     p_prompt_id: promptId,
     p_participant_identifier: participantIdentifier,
     p_raw_text: trimmed,
   });
 
-  // 4) Map a signalled rejection to a typed error.
+  // 5) Map a signalled rejection to a typed error.
   if (error) {
     throw toWordCloudError(error);
   }

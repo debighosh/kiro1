@@ -55,6 +55,7 @@
  * lifecycle).
  */
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { cx, FOCUS_RING } from '../lib/a11y';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, LabelList } from 'recharts';
 import {
   readActivePoll,
@@ -303,7 +304,10 @@ export function PollCard({
             onClick={() => {
               void load();
             }}
-            className="touch-target self-start rounded border border-ink-muted px-4 py-2 font-medium text-ink"
+            className={cx(
+              'touch-target self-start rounded border border-ink-muted px-4 py-2 font-medium text-ink',
+              FOCUS_RING,
+            )}
           >
             Try again
           </button>
@@ -350,15 +354,17 @@ export function PollCard({
                     onClick={() => {
                       void handleSelect(option.id);
                     }}
-                    className={`touch-target flex items-center gap-3 rounded-lg px-4 py-3 text-left font-medium disabled:opacity-60 ${
+                    className={cx(
+                      'touch-target flex items-center gap-3 rounded-lg px-4 py-3 text-left font-medium disabled:opacity-60',
                       selected
                         ? 'bg-focus text-surface'
-                        : 'border border-ink-muted/40 text-ink'
-                    }`}
+                        : 'border border-ink-muted text-ink',
+                      FOCUS_RING,
+                    )}
                     data-testid="poll-option"
                   >
                     <span aria-hidden="true">{selected ? '●' : '○'}</span>
-                    <span className="flex-1 whitespace-pre-wrap break-words">
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
                       {option.text}
                     </span>
                   </button>
@@ -390,7 +396,7 @@ export function PollCard({
                     className="flex items-center gap-3 rounded-lg border border-ink-muted/40 px-4 py-3 text-ink"
                   >
                     <span aria-hidden="true">○</span>
-                    <span className="flex-1 whitespace-pre-wrap break-words">
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
                       {option.text}
                     </span>
                   </li>
@@ -450,7 +456,7 @@ export function PollCard({
                     className="flex items-baseline justify-between gap-3 text-sm text-ink"
                     data-testid="poll-results-row"
                   >
-                    <dt className="flex-1 whitespace-pre-wrap break-words">
+                    <dt className="min-w-0 flex-1 whitespace-pre-wrap break-words">
                       {datum.label}
                     </dt>
                     <dd className="font-semibold tabular-nums">

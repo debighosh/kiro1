@@ -37,6 +37,7 @@
  * (Question submit).
  */
 import { useId, useState, type FormEvent } from 'react';
+import { cx, FOCUS_RING } from '../lib/a11y';
 import {
   submitQuestion,
   QuestionError,
@@ -167,7 +168,10 @@ export function QuestionSubmissionForm({
           disabled={isSubmitting}
           aria-invalid={isError ? true : undefined}
           aria-describedby={describedBy || undefined}
-          className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+          className={cx(
+            'touch-target w-full rounded border border-ink-muted px-3 py-2 text-ink',
+            FOCUS_RING,
+          )}
           placeholder="Type your question…"
         />
         {/* Character count / limit hint (Req 24.7 informative state). */}
@@ -199,7 +203,10 @@ export function QuestionSubmissionForm({
         type="submit"
         disabled={submitDisabled}
         aria-busy={isSubmitting}
-        className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+        className={cx(
+          'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+          FOCUS_RING,
+        )}
       >
         {isSubmitting ? 'Submitting…' : 'Submit question'}
       </button>
