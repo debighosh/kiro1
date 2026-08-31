@@ -5,3 +5,4 @@
  * Supabase Edge Functions.
  */
 export * from './event';
+export * from './ai';
