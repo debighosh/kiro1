@@ -2,6 +2,7 @@
  * Shared library helpers live here (e.g. Supabase client, env loader, realtime
  * hooks). Populated in later tasks.
  */
+export * from './a11y';
 export * from './env';
 export * from './supabaseClient';
 export * from './auth';

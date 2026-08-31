@@ -9,8 +9,16 @@ node_modules
 # Caches / generated
 .vite
 coverage
+test-results
+playwright-report
 *.tsbuildinfo
 package-lock.json
 
 # Spec documents (authored markdown / metadata; not source to reformat)
 .kiro
+
+
+# k6 load-test script (load/livepulse-load.js). k6 is a separate binary with its
+# own runtime: the file uses k6-only module specifiers and runtime globals
+# (__ENV, __VU, __ITER), not Node source — it is not formatted by Prettier.
+load

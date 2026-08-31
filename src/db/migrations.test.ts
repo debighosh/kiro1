@@ -1255,3 +1255,161 @@ describe('Milestone 4 schema / migrations (AI tables)', () => {
     });
   });
 });
+
+/**
+ * Task 39.1 — Milestone 5 (Hardening & Readiness) rate-limit-action migration
+ * verification.
+ *
+ * WHAT THIS BLOCK ADDS
+ * --------------------
+ * This extends the static, source-level migration guard above to cover the
+ * Milestone 5 rate-limit-action extension, using the SAME approach as the
+ * Milestone-1..4 assertions: it reads the actual migration SQL files that ship
+ * in the repo (whitespace-normalised via `normaliseSql`) and asserts, from
+ * scratch — WITHOUT a live database — that:
+ *   - `20260101000035_rate_limit_actions.sql` exists and sorts AFTER the latest
+ *     Milestone-4 migration `20260101000034_ai_jobs_clusters_rls.sql`, so the
+ *     rate_events table + check_and_record_rate_limit primitives + the two
+ *     respond RPCs it widens/re-creates all exist when it is applied from
+ *     scratch;
+ *   - the `rate_events_action_chk` CHECK is re-declared (DROP IF EXISTS + ADD)
+ *     to permit EXACTLY the four action values 'submit_question', 'vote',
+ *     'poll_respond' and 'word_cloud_respond' — the two new dedicated respond
+ *     actions are present ALONGSIDE the original two (a silent removal of the
+ *     originals or absence of a new one fails here);
+ *   - BOTH check_and_record_rate_limit allow-list guards (the `IN (...)`
+ *     predicate) list all four actions including the two new respond actions,
+ *     so the primitive no longer returns FALSE for them;
+ *   - `submit_poll_response` is re-created (CREATE OR REPLACE) and now passes
+ *     the dedicated 'poll_respond' action to check_and_record_rate_limit —
+ *     and, crucially, STILL PERFORMs broadcast_poll_results so the Task 21.4
+ *     poll-results broadcast added in …000029 is not regressed;
+ *   - `submit_word_cloud_response` is re-created (CREATE OR REPLACE) and now
+ *     passes the dedicated 'word_cloud_respond' action to
+ *     check_and_record_rate_limit;
+ *   - neither respond RPC still routes its rate limit through the shared 'vote'
+ *     bucket in this migration (the switch to the dedicated buckets is
+ *     complete).
+ *
+ * As with Milestone 1/2/3/4, a live-DB apply (actually exceeding a limit and
+ * observing that nothing is recorded, and that poll/word-cloud/vote counters no
+ * longer contend) is DEFERRED TO CI, where a PostgreSQL service is available —
+ * no Postgres/psql/pg-mem can faithfully apply these migrations in this sandbox
+ * (see the Milestone-1 rationale above). This static block is the always-on
+ * regression guard: the assertions match the SEMANTICS (the exact four allowed
+ * action values, the dedicated action argument each RPC now passes, and the
+ * preserved poll broadcast) rather than merely the word "CHECK", so a silent
+ * regression — dropping a new action, reverting an RPC to the 'vote' bucket, or
+ * losing the poll broadcast — fails the test here.
+ *
+ * Requirements: 21.13, 21.15, 26.1
+ * Design: RLS Design (Server-side rate limiting); Request/data flows
+ * (submit / vote / respond); Decision D8.
+ */
+const AI_JOBS_CLUSTERS_RLS_FILE = '20260101000034_ai_jobs_clusters_rls.sql';
+const RATE_LIMIT_ACTIONS_FILE = '20260101000035_rate_limit_actions.sql';
+
+describe('Milestone 5 schema / migrations (rate-limit actions)', () => {
+  it('ships the M5 rate-limit-actions migration after the last M4 migration', () => {
+    expect(migrationFiles).toContain(RATE_LIMIT_ACTIONS_FILE);
+    expect(migrationFiles).toContain(AI_JOBS_CLUSTERS_RLS_FILE);
+
+    const idx = (f: string) => migrationFiles.indexOf(f);
+    // The rate-limit-actions migration sorts AFTER the latest M4 migration
+    // (…000034_ai_jobs_clusters_rls), so rate_events, the rate-limit primitives
+    // and the two respond RPCs it widens/re-creates already exist when applied
+    // from scratch.
+    expect(idx(AI_JOBS_CLUSTERS_RLS_FILE)).toBeLessThan(
+      idx(RATE_LIMIT_ACTIONS_FILE),
+    );
+  });
+
+  describe('rate_events action CHECK widening', () => {
+    it('re-declares rate_events_action_chk via DROP IF EXISTS + ADD (idempotent)', () => {
+      const sql = flat[RATE_LIMIT_ACTIONS_FILE];
+      expect(sql).toMatch(
+        /ALTER TABLE rate_events DROP CONSTRAINT IF EXISTS rate_events_action_chk/i,
+      );
+      expect(sql).toMatch(
+        /ALTER TABLE rate_events ADD CONSTRAINT rate_events_action_chk\s+CHECK \(action IN \(/i,
+      );
+    });
+
+    it('permits exactly the four action values incl. the two new dedicated respond actions', () => {
+      const sql = flat[RATE_LIMIT_ACTIONS_FILE];
+      // The widened CHECK lists all four allowed action values. The two new
+      // dedicated buckets must be present ALONGSIDE the original submit/vote
+      // actions — dropping either original, or omitting a new one, fails here.
+      const m = sql.match(
+        /ADD CONSTRAINT rate_events_action_chk\s+CHECK \(action IN \(([^)]*)\)\)/i,
+      );
+      expect(m).not.toBeNull();
+      const values = m![1];
+      const expected = [
+        'submit_question',
+        'vote',
+        'poll_respond',
+        'word_cloud_respond',
+      ];
+      for (const v of expected) {
+        expect(values).toContain(`'${v}'`);
+      }
+      const quoted = values.match(/'[^']+'/g) ?? [];
+      expect(quoted).toHaveLength(expected.length);
+    });
+  });
+
+  describe('check_and_record_rate_limit allow-list widening', () => {
+    it('widens BOTH overload allow-list guards to include the two new respond actions', () => {
+      const sql = flat[RATE_LIMIT_ACTIONS_FILE];
+      // Both overloads are re-created; each has an `IF p_action NOT IN (...)`
+      // guard that must now list all four actions. There are two such guards
+      // (5-arg + 6-arg-with-fingerprint) — assert both mention the new buckets.
+      const guards = sql.match(
+        /p_action NOT IN \('submit_question', 'vote', 'poll_respond', 'word_cloud_respond'\)/gi,
+      );
+      expect(guards).not.toBeNull();
+      expect(guards!.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('respond RPCs rewired to dedicated buckets', () => {
+    it('re-creates submit_poll_response using the dedicated poll_respond action', () => {
+      const sql = flat[RATE_LIMIT_ACTIONS_FILE];
+      // The poll-response RPC is re-created and now passes 'poll_respond' as the
+      // action argument to the shared limiter (previously 'vote').
+      expect(sql).toMatch(/CREATE OR REPLACE FUNCTION submit_poll_response\(/i);
+      expect(sql).toMatch(
+        /check_and_record_rate_limit\(\s*p_participant_identifier,\s*'poll_respond',/i,
+      );
+    });
+
+    it('preserves the Task 21.4 poll-results broadcast in the re-created submit_poll_response', () => {
+      // Re-creating submit_poll_response must NOT regress the broadcast added in
+      // …000029 — the re-created body must still PERFORM broadcast_poll_results.
+      expect(flat[RATE_LIMIT_ACTIONS_FILE]).toMatch(
+        /PERFORM broadcast_poll_results\(v_event_id, p_poll_id\)/i,
+      );
+    });
+
+    it('re-creates submit_word_cloud_response using the dedicated word_cloud_respond action', () => {
+      const sql = flat[RATE_LIMIT_ACTIONS_FILE];
+      expect(sql).toMatch(
+        /CREATE OR REPLACE FUNCTION submit_word_cloud_response\(/i,
+      );
+      expect(sql).toMatch(
+        /check_and_record_rate_limit\(\s*p_participant_identifier,\s*'word_cloud_respond',/i,
+      );
+    });
+
+    it('no longer routes either respond RPC through the shared vote bucket in this migration', () => {
+      const sql = flat[RATE_LIMIT_ACTIONS_FILE];
+      // After the switch, this migration's respond-RPC rate-limit calls use the
+      // dedicated buckets; there must be NO `check_and_record_rate_limit(
+      // p_participant_identifier, 'vote', ...)` call left in the re-created RPCs.
+      expect(sql).not.toMatch(
+        /check_and_record_rate_limit\(\s*p_participant_identifier,\s*'vote',/i,
+      );
+    });
+  });
+});
