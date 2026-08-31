@@ -19,3 +19,4 @@ export * from './exports';
 export * from './download';
 export * from './summaryExport';
 export * from './analytics';
+export * from './analyticsClient';
