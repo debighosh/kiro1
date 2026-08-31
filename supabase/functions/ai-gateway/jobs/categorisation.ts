@@ -445,7 +445,11 @@ export async function runCategorisation(
       aggregateMetadata: buildCategorisationMetadata(batch.length),
     };
 
-    const validated = await runValidatedOperation(config, batchRequest, recorder);
+    const validated = await runValidatedOperation(
+      config,
+      batchRequest,
+      recorder,
+    );
     if (!validated.ok) {
       // Validation / transport failure → store NOTHING for this batch (Req 15.4).
       rejectedBatches += 1;
@@ -455,7 +459,9 @@ export async function runCategorisation(
     // The validated data satisfies `aiCategorisationResultSchema`; parse it once
     // more here to obtain the typed items (a single invalid category would have
     // already rejected the WHOLE response upstream, Req 15.3, 15.4).
-    const parsed = aiCategorisationResultSchema.safeParse(validated.result.data);
+    const parsed = aiCategorisationResultSchema.safeParse(
+      validated.result.data,
+    );
     if (!parsed.success) {
       rejectedBatches += 1;
       continue;
@@ -484,7 +490,10 @@ export type ModeratorOverrideResult =
       readonly ai_category: AiCategory;
       readonly ai_prior_category: string | null;
     }
-  | { readonly applied: false; readonly reason: 'invalid_category' | 'not_found' };
+  | {
+      readonly applied: false;
+      readonly reason: 'invalid_category' | 'not_found';
+    };
 
 /**
  * Applies a MODERATOR OVERRIDE to a question via the service role (Req 15.7,

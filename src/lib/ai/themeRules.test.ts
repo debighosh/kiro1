@@ -95,25 +95,41 @@ describe('theme-insights caps (Req 17.1)', () => {
   });
 
   it('isWithinEmergingConcernsCap accepts ≤5 and rejects 6 (Req 17.1)', () => {
-    expect(isWithinEmergingConcernsCap(labels(MAX_EMERGING_CONCERNS))).toBe(true);
-    expect(isWithinEmergingConcernsCap(labels(MAX_EMERGING_CONCERNS + 1))).toBe(false);
+    expect(isWithinEmergingConcernsCap(labels(MAX_EMERGING_CONCERNS))).toBe(
+      true,
+    );
+    expect(isWithinEmergingConcernsCap(labels(MAX_EMERGING_CONCERNS + 1))).toBe(
+      false,
+    );
   });
 
   it('isWithinFrequentTopicsCap accepts ≤10 and rejects 11 (Req 17.1)', () => {
     expect(isWithinFrequentTopicsCap(labels(MAX_FREQUENT_TOPICS))).toBe(true);
-    expect(isWithinFrequentTopicsCap(labels(MAX_FREQUENT_TOPICS + 1))).toBe(false);
+    expect(isWithinFrequentTopicsCap(labels(MAX_FREQUENT_TOPICS + 1))).toBe(
+      false,
+    );
   });
 
   it('isWithinNotableQuestionsCap accepts ≤5 and rejects 6 (Req 17.1, 17.2)', () => {
-    expect(isWithinNotableQuestionsCap(labels(MAX_NOTABLE_QUESTIONS))).toBe(true);
-    expect(isWithinNotableQuestionsCap(labels(MAX_NOTABLE_QUESTIONS + 1))).toBe(false);
+    expect(isWithinNotableQuestionsCap(labels(MAX_NOTABLE_QUESTIONS))).toBe(
+      true,
+    );
+    expect(isWithinNotableQuestionsCap(labels(MAX_NOTABLE_QUESTIONS + 1))).toBe(
+      false,
+    );
   });
 
   it('clampToCap trims to the max preserving order (Req 17.1)', () => {
     const items = labels(8); // over the ≤5 cap
     const clamped = clampToCap(items, MAX_TOP_THEMES);
     expect(clamped).toHaveLength(MAX_TOP_THEMES);
-    expect(clamped).toEqual(['label-0', 'label-1', 'label-2', 'label-3', 'label-4']);
+    expect(clamped).toEqual([
+      'label-0',
+      'label-1',
+      'label-2',
+      'label-3',
+      'label-4',
+    ]);
   });
 
   it('clampToCap leaves an already-within-cap list unchanged (Req 17.1)', () => {
@@ -123,7 +139,9 @@ describe('theme-insights caps (Req 17.1)', () => {
 
   it('clampToCap fails closed to [] on a non-array (Req 17.1)', () => {
     // Defence-in-depth: a non-array yields an empty list, never a throw.
-    expect(clampToCap(undefined as unknown as string[], MAX_TOP_THEMES)).toEqual([]);
+    expect(
+      clampToCap(undefined as unknown as string[], MAX_TOP_THEMES),
+    ).toEqual([]);
   });
 });
 
@@ -248,7 +266,9 @@ describe('empty-event rule (Req 17.5)', () => {
   });
 
   it('the shared EMPTY constant matches a freshly built one and is frozen (Req 17.5)', () => {
-    expect(EMPTY_THEME_INSIGHTS_RESULT).toEqual(buildEmptyThemeInsightsResult());
+    expect(EMPTY_THEME_INSIGHTS_RESULT).toEqual(
+      buildEmptyThemeInsightsResult(),
+    );
     expect(Object.isFrozen(EMPTY_THEME_INSIGHTS_RESULT)).toBe(true);
   });
 });
@@ -277,16 +297,22 @@ describe('validateThemeInsightsResult (Req 17.1)', () => {
   });
 
   it('rejects an over-cap top_themes array → null (Req 17.1)', () => {
-    const malformed = { ...validResult, top_themes: labels(MAX_TOP_THEMES + 1) };
+    const malformed = {
+      ...validResult,
+      top_themes: labels(MAX_TOP_THEMES + 1),
+    };
     expect(validateThemeInsightsResult(malformed)).toBeNull();
   });
 
   it('rejects an over-cap notable array → null (Req 17.1, 17.2)', () => {
-    const notable = Array.from({ length: MAX_NOTABLE_QUESTIONS + 1 }, (_, i) => ({
-      question_id: uuidFor(i),
-      vote_count: 10,
-      text: `q-${i}`,
-    }));
+    const notable = Array.from(
+      { length: MAX_NOTABLE_QUESTIONS + 1 },
+      (_, i) => ({
+        question_id: uuidFor(i),
+        vote_count: 10,
+        text: `q-${i}`,
+      }),
+    );
     const malformed = { ...validResult, notable_high_vote_questions: notable };
     expect(validateThemeInsightsResult(malformed)).toBeNull();
   });
@@ -337,7 +363,11 @@ describe('groundThemeInsightsResult (Req 17.4)', () => {
       notable_high_vote_questions: [
         { question_id: 'fabricated', vote_count: 9999, text: 'invented' },
       ],
-    } as unknown as { top_themes: string[]; emerging_concerns: string[]; frequent_topics: string[] };
+    } as unknown as {
+      top_themes: string[];
+      emerging_concerns: string[];
+      frequent_topics: string[];
+    };
 
     const eventQuestions: NotableQuestionCandidate[] = [
       candidate(0, 60),
@@ -354,7 +384,9 @@ describe('groundThemeInsightsResult (Req 17.4)', () => {
 
     // Notable questions are the DB-grounded selection (cutoff → {60,50}),
     // NOT the model's fabricated entry (Req 17.2, 17.4).
-    expect(grounded.notable_high_vote_questions.map((q) => q.vote_count)).toEqual([60, 50]);
+    expect(
+      grounded.notable_high_vote_questions.map((q) => q.vote_count),
+    ).toEqual([60, 50]);
     expect(
       grounded.notable_high_vote_questions.some((q) => q.text === 'invented'),
     ).toBe(false);

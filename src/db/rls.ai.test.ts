@@ -142,7 +142,9 @@ const hasLiveSupabase =
  * while the anon and service-role assertions still run.
  */
 const TEST_SUPABASE_ADMIN_EMAIL = readTestEnv('TEST_SUPABASE_ADMIN_EMAIL');
-const TEST_SUPABASE_ADMIN_PASSWORD = readTestEnv('TEST_SUPABASE_ADMIN_PASSWORD');
+const TEST_SUPABASE_ADMIN_PASSWORD = readTestEnv(
+  'TEST_SUPABASE_ADMIN_PASSWORD',
+);
 const hasAdminCredentials =
   hasLiveSupabase &&
   TEST_SUPABASE_ADMIN_EMAIL !== undefined &&

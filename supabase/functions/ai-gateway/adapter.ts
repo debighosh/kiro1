@@ -119,7 +119,9 @@ export class CustomAdapterNotConfiguredError extends ProviderCallError {
 // fetch) is bucketed with 2xx as a non-error informational class.
 // -----------------------------------------------------------------------------
 
-export function categoriseStatus(status: number): ProviderCallResult['statusCategory'] {
+export function categoriseStatus(
+  status: number,
+): ProviderCallResult['statusCategory'] {
   if (status >= 500) {
     return '5xx';
   }
@@ -472,7 +474,13 @@ export const customAdapter: ProviderAdapter = (
   if (registeredCustomAdapter == null) {
     throw new CustomAdapterNotConfiguredError();
   }
-  return registeredCustomAdapter(config, payload, credential, fetchImpl, signal);
+  return registeredCustomAdapter(
+    config,
+    payload,
+    credential,
+    fetchImpl,
+    signal,
+  );
 };
 
 // -----------------------------------------------------------------------------

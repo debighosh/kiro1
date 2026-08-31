@@ -188,10 +188,7 @@ export function schemaForJobType(jobType: string): z.ZodType | null {
 // -----------------------------------------------------------------------------
 
 export type ValidationFailureReason =
-  | 'no_json'
-  | 'invalid_json'
-  | 'schema_violation'
-  | 'unsupported_job_type';
+  'no_json' | 'invalid_json' | 'schema_violation' | 'unsupported_job_type';
 
 export type ValidationResult =
   | { readonly valid: true; readonly data: unknown }

@@ -204,9 +204,7 @@ export function selectCategorisationCandidates<T extends CandidateQuestion>(
   if (!Array.isArray(questions)) {
     return [];
   }
-  return questions.filter((q) =>
-    isEligibleForCategorisation(q, includeHidden),
-  );
+  return questions.filter((q) => isEligibleForCategorisation(q, includeHidden));
 }
 
 // -----------------------------------------------------------------------------
@@ -229,7 +227,10 @@ export function chunkForCategorisation<T>(
     return [];
   }
   const chunkSize = Math.min(
-    Math.max(Number.isFinite(size) ? Math.floor(size) : MAX_CATEGORISATION_BATCH, 1),
+    Math.max(
+      Number.isFinite(size) ? Math.floor(size) : MAX_CATEGORISATION_BATCH,
+      1,
+    ),
     MAX_CATEGORISATION_BATCH,
   );
   const chunks: T[][] = [];

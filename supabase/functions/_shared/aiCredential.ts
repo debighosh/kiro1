@@ -87,8 +87,7 @@ export interface EncryptedCredentialStorage {
 
 /** Exactly ONE storage path — never both, never plaintext (Req 12.4, 12.6). */
 export type CredentialStorage =
-  | SecretReferenceStorage
-  | EncryptedCredentialStorage;
+  SecretReferenceStorage | EncryptedCredentialStorage;
 
 /** Thrown for every resolve/decrypt failure; carries no secret (Req 12.8). */
 export class CredentialResolutionError extends Error {

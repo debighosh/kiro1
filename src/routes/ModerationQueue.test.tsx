@@ -24,25 +24,22 @@ import { AI_QUESTION_CATEGORIES } from '../schemas/ai';
 import type { ModerationQuestion } from '../lib/moderation';
 
 // --- Mock the moderation helper the screen depends on. ---------------------
-const {
-  ModerationError,
-  readModerationQuestions,
-  moderateQuestion,
-} = vi.hoisted(() => {
-  class ModerationError extends Error {
-    kind: string;
-    constructor(message: string, options: { kind: string }) {
-      super(message);
-      this.name = 'ModerationError';
-      this.kind = options.kind;
+const { ModerationError, readModerationQuestions, moderateQuestion } =
+  vi.hoisted(() => {
+    class ModerationError extends Error {
+      kind: string;
+      constructor(message: string, options: { kind: string }) {
+        super(message);
+        this.name = 'ModerationError';
+        this.kind = options.kind;
+      }
     }
-  }
-  return {
-    ModerationError,
-    readModerationQuestions: vi.fn(),
-    moderateQuestion: vi.fn(),
-  };
-});
+    return {
+      ModerationError,
+      readModerationQuestions: vi.fn(),
+      moderateQuestion: vi.fn(),
+    };
+  });
 
 vi.mock('../lib/moderation', () => ({
   ModerationError,
@@ -54,7 +51,8 @@ vi.mock('../lib/moderation', () => ({
     'answered',
     'hidden',
   ] as const,
-  readModerationQuestions: (eventId: string) => readModerationQuestions(eventId),
+  readModerationQuestions: (eventId: string) =>
+    readModerationQuestions(eventId),
   moderateQuestion: (input: unknown) => moderateQuestion(input),
   // A faithful, deterministic re-implementation of the pure filter helper:
   // ALL supplied criteria are AND-combined; text search is case-insensitive.
@@ -77,30 +75,30 @@ vi.mock('../lib/moderation', () => ({
 }));
 
 // --- Mock the AI client the screen depends on. -----------------------------
-const {
-  AiClientError,
-  runCategorisation,
-  overrideQuestionCategory,
-} = vi.hoisted(() => {
-  class AiClientError extends Error {
-    kind: string;
-    fields: { field: string; message: string }[];
-    constructor(
-      message: string,
-      options: { kind: string; fields?: { field: string; message: string }[] },
-    ) {
-      super(message);
-      this.name = 'AiClientError';
-      this.kind = options.kind;
-      this.fields = options.fields ?? [];
+const { AiClientError, runCategorisation, overrideQuestionCategory } =
+  vi.hoisted(() => {
+    class AiClientError extends Error {
+      kind: string;
+      fields: { field: string; message: string }[];
+      constructor(
+        message: string,
+        options: {
+          kind: string;
+          fields?: { field: string; message: string }[];
+        },
+      ) {
+        super(message);
+        this.name = 'AiClientError';
+        this.kind = options.kind;
+        this.fields = options.fields ?? [];
+      }
     }
-  }
-  return {
-    AiClientError,
-    runCategorisation: vi.fn(),
-    overrideQuestionCategory: vi.fn(),
-  };
-});
+    return {
+      AiClientError,
+      runCategorisation: vi.fn(),
+      overrideQuestionCategory: vi.fn(),
+    };
+  });
 
 vi.mock('../lib/aiClient', () => ({
   AiClientError,
@@ -110,7 +108,9 @@ vi.mock('../lib/aiClient', () => ({
 
 import { ModerationQueue } from './ModerationQueue';
 
-function question(overrides: Partial<ModerationQuestion> = {}): ModerationQuestion {
+function question(
+  overrides: Partial<ModerationQuestion> = {},
+): ModerationQuestion {
   return {
     id: 'q-1',
     text: 'A question about the roadmap',
@@ -201,7 +201,9 @@ describe('ModerationQueue — per-row override (Req 15.3, 15.7)', () => {
     // Exactly the 8 allowed categories + the leading "No change" sentinel.
     expect(options).toHaveLength(AI_QUESTION_CATEGORIES.length + 1);
     expect(options[0]).toHaveTextContent(/no change/i);
-    const optionValues = options.slice(1).map((o) => (o as HTMLOptionElement).value);
+    const optionValues = options
+      .slice(1)
+      .map((o) => (o as HTMLOptionElement).value);
     expect(optionValues).toEqual([...AI_QUESTION_CATEGORIES]);
   });
 

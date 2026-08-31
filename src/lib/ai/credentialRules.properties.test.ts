@@ -195,9 +195,9 @@ describe('Feature: mss-livepulse, Property 12: Credential never present in any r
           // (1) The ciphertext blob must NOT embed the plaintext bytes.
           expect(bytesContain(blob, plaintext)).toBe(false);
           // (2) The storage result carries no plaintext field of any name.
-          expect(Object.prototype.hasOwnProperty.call(storage, 'plaintext')).toBe(
-            false,
-          );
+          expect(
+            Object.prototype.hasOwnProperty.call(storage, 'plaintext'),
+          ).toBe(false);
           expect(
             Object.prototype.hasOwnProperty.call(storage, 'credential'),
           ).toBe(false);
@@ -236,33 +236,33 @@ describe('Feature: mss-livepulse, Property 12: Credential never present in any r
         distinctiveCredentialArb,
         secretRefArb,
         async (plaintext, ref) => {
-        const storage = await prepareCredentialForStorage(
-          plaintext,
-          { secretReference: ref },
-          null,
-        );
+          const storage = await prepareCredentialForStorage(
+            plaintext,
+            { secretReference: ref },
+            null,
+          );
 
-        expect(storage.kind).toBe('secret_reference');
-        // The result carries the (non-secret) pointer but NEVER the plaintext.
-        const storageJson = JSON.stringify(storage);
-        expect(storageJson.includes('encrypted_credential')).toBe(false);
-        // The plaintext credential must never appear in the storage result.
-        // (Only assert when the plaintext isn't coincidentally equal to / a
-        // substring of the reference pointer, which is a legitimate stored
-        // non-secret value — a ≥16-char distinctive plaintext makes an
-        // accidental structural match astronomically unlikely.)
-        if (!ref.includes(plaintext)) {
-          expect(storageJson.includes(plaintext)).toBe(false);
-        }
+          expect(storage.kind).toBe('secret_reference');
+          // The result carries the (non-secret) pointer but NEVER the plaintext.
+          const storageJson = JSON.stringify(storage);
+          expect(storageJson.includes('encrypted_credential')).toBe(false);
+          // The plaintext credential must never appear in the storage result.
+          // (Only assert when the plaintext isn't coincidentally equal to / a
+          // substring of the reference pointer, which is a legitimate stored
+          // non-secret value — a ≥16-char distinctive plaintext makes an
+          // accidental structural match astronomically unlikely.)
+          if (!ref.includes(plaintext)) {
+            expect(storageJson.includes(plaintext)).toBe(false);
+          }
 
-        // The log descriptor is ONLY { kind, present } — it NEVER echoes the
-        // secret_reference target string (Req 12.9).
-        const descriptor = describeCredentialForLog(storage);
-        expect(Object.keys(descriptor).sort()).toEqual(['kind', 'present']);
-        expect(descriptor.kind).toBe('secret_reference');
-        expect(descriptor.present).toBe(true);
-        const descriptorJson = JSON.stringify(descriptor);
-        expect(descriptorJson.includes(ref)).toBe(false);
+          // The log descriptor is ONLY { kind, present } — it NEVER echoes the
+          // secret_reference target string (Req 12.9).
+          const descriptor = describeCredentialForLog(storage);
+          expect(Object.keys(descriptor).sort()).toEqual(['kind', 'present']);
+          expect(descriptor.kind).toBe('secret_reference');
+          expect(descriptor.present).toBe(true);
+          const descriptorJson = JSON.stringify(descriptor);
+          expect(descriptorJson.includes(ref)).toBe(false);
         },
       ),
       { numRuns: 300 },
@@ -350,8 +350,11 @@ describe('Feature: mss-livepulse, Property 13: Credential storage is exclusive (
               ? await importAeadKey(keyBytes(fill))
               : null;
 
-          const storage: CredentialStorage =
-            await prepareCredentialForStorage(plaintext, config, key);
+          const storage: CredentialStorage = await prepareCredentialForStorage(
+            plaintext,
+            config,
+            key,
+          );
 
           // The chosen path matches the pure decision.
           expect(storage.kind).toBe(expectedPath);
@@ -407,7 +410,10 @@ describe('Feature: mss-livepulse, Property 13: Credential storage is exclusive (
           fc.constant(null),
           fc.constant(new Uint8Array(0)),
           fc
-            .array(fc.integer({ min: 0, max: 255 }), { minLength: 1, maxLength: 32 })
+            .array(fc.integer({ min: 0, max: 255 }), {
+              minLength: 1,
+              maxLength: 32,
+            })
             .map((a) => Uint8Array.from(a)),
         ),
         (ref, blob) => {

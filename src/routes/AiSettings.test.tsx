@@ -188,7 +188,9 @@ describe('AiSettings — write-only credential (Req 12.10)', () => {
 
     // … and the credential input is a PASSWORD field that starts EMPTY (a
     // write-only replace box — the stored value is never populated into it).
-    const credentialInput = screen.getByLabelText(/enter credential to replace/i);
+    const credentialInput = screen.getByLabelText(
+      /enter credential to replace/i,
+    );
     expect(credentialInput).toHaveAttribute('type', 'password');
     expect(credentialInput).toHaveValue('');
   });
@@ -210,12 +212,16 @@ describe('AiSettings — Replace/Remove gating (Req 11.12, 11.13)', () => {
 
     // The re-verify prompt opens; removal is NOT performed.
     expect(
-      await screen.findByRole('alertdialog', { name: /re-verify your session/i }),
+      await screen.findByRole('alertdialog', {
+        name: /re-verify your session/i,
+      }),
     ).toBeInTheDocument();
     expect(removeAiCredential).not.toHaveBeenCalled();
     // The explicit confirmation step is NOT shown yet either.
     expect(
-      screen.queryByRole('alertdialog', { name: /confirm credential removal/i }),
+      screen.queryByRole('alertdialog', {
+        name: /confirm credential removal/i,
+      }),
     ).not.toBeInTheDocument();
   });
 

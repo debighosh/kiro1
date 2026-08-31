@@ -133,8 +133,7 @@ export interface AiUnavailableIndication {
 }
 
 const AI_UNAVAILABLE_MESSAGE: Readonly<Record<AiFailureMode, string>> = {
-  not_configured:
-    'AI is not configured. The rest of the app is unaffected.',
+  not_configured: 'AI is not configured. The rest of the app is unaffected.',
   unreachable:
     'AI is currently unavailable. The rest of the app is unaffected.',
   auth_failure:
@@ -177,7 +176,9 @@ export function describeAiUnavailable(
   };
 }
 
-export function indicationForCode(sanitisedCode: string): AiUnavailableIndication {
+export function indicationForCode(
+  sanitisedCode: string,
+): AiUnavailableIndication {
   return describeAiUnavailable(classifyFailureMode(sanitisedCode));
 }
 

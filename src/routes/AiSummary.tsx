@@ -103,8 +103,9 @@ export function AiSummary(): JSX.Element {
       <h1 className="text-2xl font-semibold text-ink">End-of-event summary</h1>
       <p className="mt-2 text-ink-muted">
         Generate the end-of-event summary for this event. The calculated data is
-        computed directly from the database; the AI interpretation is a separate,
-        clearly-labelled section that is produced only when AI is available.
+        computed directly from the database; the AI interpretation is a
+        separate, clearly-labelled section that is produced only when AI is
+        available.
       </p>
 
       <button
@@ -156,7 +157,8 @@ export function AiSummary(): JSX.Element {
           ) : null}
 
           <p className="mt-3 text-ink-muted">
-            {summary.questionCount} question(s) were considered for this summary.
+            {summary.questionCount} question(s) were considered for this
+            summary.
           </p>
 
           {/*

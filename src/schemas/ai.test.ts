@@ -91,7 +91,10 @@ describe('aiProviderSettingsInputSchema — a fully valid input parses', () => {
 
 describe('display_name boundaries (Req 11.1)', () => {
   it('rejects empty (min-1) attributing the error to display_name', () => {
-    expectRejectedAtField({ ...validInput(), display_name: '' }, 'display_name');
+    expectRejectedAtField(
+      { ...validInput(), display_name: '' },
+      'display_name',
+    );
   });
   it('rejects over-max attributing the error to display_name', () => {
     expectRejectedAtField(
@@ -113,12 +116,14 @@ describe('base_url boundaries and absolute-URL rule (Req 11.1)', () => {
   });
   it('rejects over-max attributing the error to base_url', () => {
     // Build a syntactically-valid-but-too-long https URL.
-    const tooLong =
-      'https://a.example.com/' + 'x'.repeat(AI_BASE_URL_MAX + 1);
+    const tooLong = 'https://a.example.com/' + 'x'.repeat(AI_BASE_URL_MAX + 1);
     expectRejectedAtField({ ...validInput(), base_url: tooLong }, 'base_url');
   });
   it('rejects a relative path (not absolute) at base_url', () => {
-    expectRejectedAtField({ ...validInput(), base_url: '/v1/chat' }, 'base_url');
+    expectRejectedAtField(
+      { ...validInput(), base_url: '/v1/chat' },
+      'base_url',
+    );
   });
   it('rejects a non-http scheme at base_url', () => {
     expectRejectedAtField(

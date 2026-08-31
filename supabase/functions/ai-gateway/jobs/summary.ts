@@ -780,7 +780,11 @@ export async function runSummary(
     aggregateMetadata: buildSummaryMetadata(calculated),
   };
 
-  const validated = await runValidatedOperation(config, summaryRequest, recorder);
+  const validated = await runValidatedOperation(
+    config,
+    summaryRequest,
+    recorder,
+  );
 
   // 4) AI unavailable / failed → STILL produce the calculated report + visible
   // notice, and return success (Req 18.7, 19.1). The validated runner already

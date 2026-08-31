@@ -512,7 +512,9 @@ function buildAiInterpretationSection(
 
   if (aiInterpretation == null) {
     // Req 18.7 — AI unavailable: omit AI content, show the visible notice.
-    lines.push(`> **${AI_GENERATED_LABEL} content unavailable.** ${AI_UNAVAILABLE_NOTICE}`);
+    lines.push(
+      `> **${AI_GENERATED_LABEL} content unavailable.** ${AI_UNAVAILABLE_NOTICE}`,
+    );
     return lines.join('\n');
   }
 
@@ -533,7 +535,9 @@ function buildAiInterpretationSection(
     ? aiInterpretation.suggested_follow_up_actions
     : [];
   if (actions.length === 0) {
-    lines.push(`- **${AI_GENERATED_LABEL}:** _No follow-up actions were suggested._`);
+    lines.push(
+      `- **${AI_GENERATED_LABEL}:** _No follow-up actions were suggested._`,
+    );
   } else {
     for (const action of actions) {
       lines.push(`- **${AI_GENERATED_LABEL}:** ${escapeMarkdownText(action)}`);
@@ -562,7 +566,9 @@ export function buildSummaryMarkdown(
   aiInterpretation: AiSummaryResult | null,
 ): string {
   const parts: string[] = [];
-  parts.push(`# End-of-Event Summary: ${escapeMarkdownText(calculatedData.event.name)}`);
+  parts.push(
+    `# End-of-Event Summary: ${escapeMarkdownText(calculatedData.event.name)}`,
+  );
   parts.push('');
   parts.push(buildCalculatedSection(calculatedData));
   parts.push('');

@@ -137,8 +137,7 @@ export interface EncryptedCredentialStorage {
  * construction, and NEITHER variant carries the plaintext (Req 12.4).
  */
 export type CredentialStorage =
-  | SecretReferenceStorage
-  | EncryptedCredentialStorage;
+  SecretReferenceStorage | EncryptedCredentialStorage;
 
 /**
  * Error thrown for every credential resolve/decrypt failure. Its message is the
@@ -202,8 +201,7 @@ export function isValidCredentialXor(
 ): boolean {
   const hasRef =
     typeof secretReference === 'string' && secretReference.length > 0;
-  const hasEnc =
-    encryptedCredential != null && encryptedCredential.length > 0;
+  const hasEnc = encryptedCredential != null && encryptedCredential.length > 0;
   return !(hasRef && hasEnc);
 }
 
@@ -281,9 +279,7 @@ export async function encryptCredential(
 ): Promise<Uint8Array> {
   try {
     const subtle = getSubtle();
-    const iv = globalThis.crypto.getRandomValues(
-      new Uint8Array(AEAD_IV_BYTES),
-    );
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(AEAD_IV_BYTES));
     const encoded = new TextEncoder().encode(plaintext);
     const cipherBuf = await subtle.encrypt(
       { name: AEAD_ALGORITHM, iv },
@@ -363,10 +359,7 @@ export async function decryptCredential(
   blob: Uint8Array,
 ): Promise<string> {
   // Fail closed on structurally invalid input before touching the cipher.
-  if (
-    !(blob instanceof Uint8Array) ||
-    blob.length < MIN_ENCRYPTED_BLOB_BYTES
-  ) {
+  if (!(blob instanceof Uint8Array) || blob.length < MIN_ENCRYPTED_BLOB_BYTES) {
     throw new CredentialResolutionError();
   }
   try {

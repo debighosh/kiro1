@@ -65,7 +65,12 @@ const VALID_CATEGORIES: readonly AiCategory[] = AI_QUESTION_CATEGORIES;
 const trickyTextArb: fc.Arbitrary<string> = fc.oneof(
   fc.string(),
   // Full unicode code points (incl. astral plane / emoji) as a string.
-  fc.array(fc.integer({ min: 0, max: 0x10ffff }).filter((c) => c < 0xd800 || c > 0xdfff))
+  fc
+    .array(
+      fc
+        .integer({ min: 0, max: 0x10ffff })
+        .filter((c) => c < 0xd800 || c > 0xdfff),
+    )
     .map((cps) => String.fromCodePoint(...cps)),
   fc.constantFrom(
     '',
@@ -210,7 +215,9 @@ describe('Feature: mss-livepulse, Property 17: Categorisation preserves original
             // The new category is the (valid) proposed one, and the prior
             // category was recorded from the pre-override state (Req 15.7).
             expect(afterOverride.ai_category).toBe(proposedOverride);
-            expect(afterOverride.ai_prior_category).toBe(afterStore.ai_category);
+            expect(afterOverride.ai_prior_category).toBe(
+              afterStore.ai_category,
+            );
           } else {
             // (c) Invalid override: RETAIN prior assignment — nothing changes.
             expect(outcome.reason).toBe('invalid_category');

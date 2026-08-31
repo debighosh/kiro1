@@ -159,13 +159,15 @@ export function clampToCap<T>(items: readonly T[], max: number): T[] {
  * NO provider call is made and NO content is fabricated. A frozen constant so
  * callers cannot mutate the shared value.
  */
-export const EMPTY_THEME_INSIGHTS_RESULT: AiThemeInsightsResult = Object.freeze({
-  top_themes: [],
-  emerging_concerns: [],
-  frequent_topics: [],
-  notable_high_vote_questions: [],
-  has_data: false,
-}) as AiThemeInsightsResult;
+export const EMPTY_THEME_INSIGHTS_RESULT: AiThemeInsightsResult = Object.freeze(
+  {
+    top_themes: [],
+    emerging_concerns: [],
+    frequent_topics: [],
+    notable_high_vote_questions: [],
+    has_data: false,
+  },
+) as AiThemeInsightsResult;
 
 /**
  * Whether the selected event has NO stored questions (Req 17.5). PURE and total:
@@ -251,7 +253,9 @@ function safeVoteCount(value: unknown): number {
  * ceil(0.90 * n) of the ascending-sorted counts; a question is in the top 10%
  * when `vote_count >= cutoff`. Returns 0 for an empty input. PURE; never throws.
  */
-export function computeTopPercentileCutoff(voteCounts: readonly number[]): number {
+export function computeTopPercentileCutoff(
+  voteCounts: readonly number[],
+): number {
   if (!Array.isArray(voteCounts) || voteCounts.length === 0) {
     return 0;
   }
@@ -374,7 +378,11 @@ export function selectNotableHighVoteQuestions(
       if (b.vote_count !== a.vote_count) {
         return b.vote_count - a.vote_count;
       }
-      return a.question_id < b.question_id ? -1 : a.question_id > b.question_id ? 1 : 0;
+      return a.question_id < b.question_id
+        ? -1
+        : a.question_id > b.question_id
+          ? 1
+          : 0;
     });
 
   return clampToCap(notable, MAX_NOTABLE_QUESTIONS);

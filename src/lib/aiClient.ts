@@ -110,8 +110,7 @@ export const AI_CONFIG_FUNCTION = 'ai-config' as const;
  * eight allowed categories via {@link isValidOverrideCategory} so an invalid
  * category cannot even be submitted.
  */
-export const AI_CATEGORISE_OVERRIDE_FUNCTION =
-  'categorise-override' as const;
+export const AI_CATEGORISE_OVERRIDE_FUNCTION = 'categorise-override' as const;
 
 /** The whitelisted NON-SECRET read RPC (migration …000033). */
 export const READ_AI_PROVIDER_SETTINGS_RPC =
@@ -166,9 +165,7 @@ export interface AiProviderSettingsPublic {
 
 /** The three connection-test outcomes surfaced to the admin (Req 13.11). */
 export type ConnectionTestOutcome =
-  | 'established'
-  | 'reachable_but_incompatible'
-  | 'failed';
+  'established' | 'reachable_but_incompatible' | 'failed';
 
 /** Fixed, credential-free connection-test failure categories (Req 13.3). */
 export type ConnectionTestFailureCategory =
@@ -349,16 +346,17 @@ function toAiClientError(status: number, body: EdgeErrorBody): AiClientError {
     code === 'validation_failed' ||
     code === 'invalid_json'
   ) {
-    return new AiClientError(
-      message ?? 'One or more fields are invalid.',
-      { kind: 'validation', status, fields },
-    );
+    return new AiClientError(message ?? 'One or more fields are invalid.', {
+      kind: 'validation',
+      status,
+      fields,
+    });
   }
   if (status === 404 || code === 'not_found' || code === 'not_implemented') {
-    return new AiClientError(
-      'Saving AI settings is not available yet.',
-      { kind: 'not_implemented', status },
-    );
+    return new AiClientError('Saving AI settings is not available yet.', {
+      kind: 'not_implemented',
+      status,
+    });
   }
   return new AiClientError(
     message ?? 'The AI operation could not be completed. Please try again.',
@@ -453,7 +451,9 @@ export async function isSessionRecentlyVerified(): Promise<boolean> {
 // ----------------------------------------------------------------------------
 
 /** Narrows an untyped RPC row to {@link AiProviderSettingsPublic}. */
-function isProviderSettingsRow(value: unknown): value is AiProviderSettingsPublic {
+function isProviderSettingsRow(
+  value: unknown,
+): value is AiProviderSettingsPublic {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
@@ -486,10 +486,9 @@ function isProviderSettingsRow(value: unknown): value is AiProviderSettingsPubli
 export async function readAiProviderSettings(): Promise<AiProviderSettingsPublic | null> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
 
   const { data, error } = await supabase.rpc(READ_AI_PROVIDER_SETTINGS_RPC);
@@ -505,10 +504,10 @@ export async function readAiProviderSettings(): Promise<AiProviderSettingsPublic
   const row = Array.isArray(data) ? data[0] : data;
   if (row == null) return null;
   if (!isProviderSettingsRow(row)) {
-    throw new AiClientError(
-      'The AI settings response was malformed.',
-      { kind: 'unknown', cause: data },
-    );
+    throw new AiClientError('The AI settings response was malformed.', {
+      kind: 'unknown',
+      cause: data,
+    });
   }
   return row;
 }
@@ -533,10 +532,9 @@ export async function readAiProviderSettings(): Promise<AiProviderSettingsPublic
 export async function runConnectionTest(): Promise<ConnectionTestResponse> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
 
   const { data, error } = await supabase.functions.invoke(AI_GATEWAY_FUNCTION, {
@@ -605,10 +603,9 @@ export async function saveAiProviderSettings(
 ): Promise<AiProviderSettingsPublic> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
 
   const { data, error } = await supabase.functions.invoke(AI_CONFIG_FUNCTION, {
@@ -668,10 +665,9 @@ export async function saveAiProviderSettings(
 export async function removeAiCredential(): Promise<AiProviderSettingsPublic | null> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
 
   const { data, error } = await supabase.functions.invoke(AI_CONFIG_FUNCTION, {
@@ -703,7 +699,6 @@ export async function removeAiCredential(): Promise<AiProviderSettingsPublic | n
   // The removal succeeded but no row was echoed — re-read the current state.
   return readAiProviderSettings();
 }
-
 
 // ----------------------------------------------------------------------------
 // (e) Categorisation job — WIRED via the `ai-gateway` Edge Function (task 30.1).
@@ -789,10 +784,9 @@ export async function runCategorisation(
 ): Promise<CategorisationResponse> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
   if (!eventId) {
     throw new AiClientError('No event was specified.', {
@@ -927,10 +921,9 @@ export async function overrideQuestionCategory(
 ): Promise<OverrideQuestionCategoryResult> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
   if (!input.questionId) {
     throw new AiClientError('No question was specified.', {
@@ -941,10 +934,9 @@ export async function overrideQuestionCategory(
   // call so an invalid category is never submitted (Req 15.3). The server also
   // retains the prior assignment on an invalid value (Req 15.8).
   if (!isValidOverrideCategory(input.category)) {
-    throw new AiClientError(
-      'Please choose one of the available categories.',
-      { kind: 'validation' },
-    );
+    throw new AiClientError('Please choose one of the available categories.', {
+      kind: 'validation',
+    });
   }
 
   const { data, error } = await supabase.functions.invoke(
@@ -991,7 +983,6 @@ export async function overrideQuestionCategory(
     { kind: 'unknown', cause: data },
   );
 }
-
 
 // ----------------------------------------------------------------------------
 // (g) Theme-insights job — WIRED via the `ai-gateway` Edge Function (task 32.1).
@@ -1056,10 +1047,9 @@ export async function runThemeInsights(
 ): Promise<ThemeInsightsResponse> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
   if (!eventId) {
     throw new AiClientError('No event was specified.', {
@@ -1101,7 +1091,6 @@ export async function runThemeInsights(
     { kind: 'unknown', cause: data },
   );
 }
-
 
 // ----------------------------------------------------------------------------
 // (h) End-of-event summary job — WIRED via the `ai-gateway` Edge Function
@@ -1196,10 +1185,9 @@ function isSummaryPayload(value: unknown): value is {
 export async function runSummary(eventId: string): Promise<SummaryResponse> {
   const session = await getSession();
   if (!session?.access_token) {
-    throw new AiClientError(
-      'Your session has expired. Please sign in again.',
-      { kind: 'unauthorized' },
-    );
+    throw new AiClientError('Your session has expired. Please sign in again.', {
+      kind: 'unauthorized',
+    });
   }
   if (!eventId) {
     throw new AiClientError('No event was specified.', {

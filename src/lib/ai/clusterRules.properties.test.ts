@@ -55,7 +55,11 @@ const memberArb: fc.Arbitrary<ClusterMember> = fc.record({
 });
 
 type ClusterOp =
-  | { readonly kind: 'add'; readonly questionId: string; readonly voteCount: number }
+  | {
+      readonly kind: 'add';
+      readonly questionId: string;
+      readonly voteCount: number;
+    }
   | { readonly kind: 'remove'; readonly questionId: string };
 
 const clusterOpArb: fc.Arbitrary<ClusterOp> = fc.oneof(
@@ -92,35 +96,29 @@ function arithmeticSum(oracle: ReadonlyMap<string, number>): number {
 describe('Feature: mss-livepulse, Property 18: Cluster vote total equals sum of member votes', () => {
   it('computeClusterVoteTotal equals the arithmetic sum of the member vote counts', () => {
     fc.assert(
-      fc.property(
-        fc.array(voteCountArb, { maxLength: 500 }),
-        (voteCounts) => {
-          const expected = voteCounts.reduce((acc, n) => acc + n, 0);
-          expect(computeClusterVoteTotal(voteCounts)).toBe(expected);
-        },
-      ),
+      fc.property(fc.array(voteCountArb, { maxLength: 500 }), (voteCounts) => {
+        const expected = voteCounts.reduce((acc, n) => acc + n, 0);
+        expect(computeClusterVoteTotal(voteCounts)).toBe(expected);
+      }),
       { numRuns: 300 },
     );
   });
 
   it('the constructed model total equals the sum of its distinct members (re-add replaces)', () => {
     fc.assert(
-      fc.property(
-        fc.array(memberArb, { maxLength: 20 }),
-        (members) => {
-          const model = new ClusterVoteModel(members);
+      fc.property(fc.array(memberArb, { maxLength: 20 }), (members) => {
+        const model = new ClusterVoteModel(members);
 
-          // Oracle: single membership per id — a later member with the same id
-          // REPLACES the earlier vote count (mirrors ClusterVoteModel.addMember).
-          const oracle = new Map<string, number>();
-          for (const m of members) {
-            oracle.set(m.questionId, m.voteCount);
-          }
+        // Oracle: single membership per id — a later member with the same id
+        // REPLACES the earlier vote count (mirrors ClusterVoteModel.addMember).
+        const oracle = new Map<string, number>();
+        for (const m of members) {
+          oracle.set(m.questionId, m.voteCount);
+        }
 
-          expect(model.size).toBe(oracle.size);
-          expect(model.voteTotal).toBe(arithmeticSum(oracle));
-        },
-      ),
+        expect(model.size).toBe(oracle.size);
+        expect(model.voteTotal).toBe(arithmeticSum(oracle));
+      }),
       { numRuns: 300 },
     );
   });
@@ -181,7 +179,9 @@ describe('Feature: mss-livepulse, Property 18: Cluster vote total equals sum of 
         voteCountArb,
         voteCountArb,
         (id, first, second) => {
-          const model = new ClusterVoteModel([{ questionId: id, voteCount: first }]);
+          const model = new ClusterVoteModel([
+            { questionId: id, voteCount: first },
+          ]);
           expect(model.voteTotal).toBe(first);
 
           // Re-add the SAME id with a different count: single membership means

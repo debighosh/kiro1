@@ -153,10 +153,7 @@ describe('validateStructuredOutput — no_json (Req 14.7)', () => {
   it('returns no_json for a non-string candidate', () => {
     // The pure module is total and must not throw on a non-string candidate.
     expect(
-      validateStructuredOutput(
-        'clustering',
-        undefined as unknown as string,
-      ),
+      validateStructuredOutput('clustering', undefined as unknown as string),
     ).toEqual({ valid: false, reason: 'no_json' });
     expect(
       validateStructuredOutput('clustering', null as unknown as string),
@@ -207,9 +204,9 @@ describe('validateStructuredOutput — schema_violation (Req 14.2)', () => {
       clusters: [{ label: 'Lonely', question_ids: [UUID_A] }],
       insufficient_data: false,
     };
-    expect(
-      validateStructuredOutput('clustering', JSON.stringify(bad)),
-    ).toEqual({ valid: false, reason: 'schema_violation' });
+    expect(validateStructuredOutput('clustering', JSON.stringify(bad))).toEqual(
+      { valid: false, reason: 'schema_violation' },
+    );
   });
 
   it('rejects a theme-insights result exceeding the top_themes cap (>5)', () => {
@@ -242,9 +239,10 @@ describe('validateStructuredOutput — schema_violation (Req 14.2)', () => {
 
   it('rejects a summary missing required fields', () => {
     const bad = { executive_summary: 'only this field' };
-    expect(
-      validateStructuredOutput('summary', JSON.stringify(bad)),
-    ).toEqual({ valid: false, reason: 'schema_violation' });
+    expect(validateStructuredOutput('summary', JSON.stringify(bad))).toEqual({
+      valid: false,
+      reason: 'schema_violation',
+    });
   });
 });
 
@@ -259,9 +257,10 @@ describe('validateStructuredOutput — unsupported_job_type', () => {
   });
 
   it('returns unsupported_job_type for an unknown job type', () => {
-    expect(
-      validateStructuredOutput('totally_unknown_job', '{}'),
-    ).toEqual({ valid: false, reason: 'unsupported_job_type' });
+    expect(validateStructuredOutput('totally_unknown_job', '{}')).toEqual({
+      valid: false,
+      reason: 'unsupported_job_type',
+    });
   });
 
   it('checks job type BEFORE candidate content (fails closed on unknown type)', () => {

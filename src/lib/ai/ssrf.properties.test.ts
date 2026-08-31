@@ -202,8 +202,7 @@ describe('Feature: mss-livepulse, Property 16: SSRF allowlist enforcement', () =
           // (host allowlisted).
           const schemeOk = isAllowedScheme(scheme);
           const everyIpOk = ips.every(
-            ({ ip, blocked }) =>
-              !blocked || allowSet.has(ip) || allowHost,
+            ({ ip, blocked }) => !blocked || allowSet.has(ip) || allowHost,
           );
           const expectedAllowed = schemeOk && everyIpOk;
 
@@ -219,9 +218,11 @@ describe('Feature: mss-livepulse, Property 16: SSRF allowlist enforcement', () =
           if (!decision.allowed) {
             // A denial must carry one of the expected CATEGORY reasons and,
             // being pure, dispatches nothing.
-            expect(['invalid_scheme', 'no_resolved_ips', 'blocked_range']).toContain(
-              decision.reason,
-            );
+            expect([
+              'invalid_scheme',
+              'no_resolved_ips',
+              'blocked_range',
+            ]).toContain(decision.reason);
             if (!schemeOk) {
               expect(decision.reason).toBe('invalid_scheme');
             } else {

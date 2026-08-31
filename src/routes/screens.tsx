@@ -1276,7 +1276,10 @@ export function PresenterView(): JSX.Element {
           ) : themeInsights && themeInsights.has_data ? (
             <div className="flex w-full max-w-6xl flex-col gap-10 text-left">
               {themeInsights.top_themes.length > 0 ? (
-                <section aria-label="Top themes" className="flex flex-col gap-4">
+                <section
+                  aria-label="Top themes"
+                  className="flex flex-col gap-4"
+                >
                   <h3 className="text-3xl font-bold text-white/90">
                     Top themes
                   </h3>

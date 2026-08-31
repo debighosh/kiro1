@@ -116,8 +116,9 @@ function runCoreOperation(
   };
 }
 
-const coreOperationArb: fc.Arbitrary<CoreOperation> =
-  fc.constantFrom(...CORE_OPERATIONS);
+const coreOperationArb: fc.Arbitrary<CoreOperation> = fc.constantFrom(
+  ...CORE_OPERATIONS,
+);
 
 // ---------------------------------------------------------------------------
 // Message-sanitisation guard. The client-facing indication message must convey
@@ -130,7 +131,9 @@ function messageLeaksInternals(message: string): boolean {
   const lower = message.toLowerCase();
   // Hostnames / URLs / domains.
   if (/https?:\/\//.test(lower)) return true;
-  if (/\b[a-z0-9-]+\.(com|net|org|io|ai|internal|local|dev|cloud)\b/.test(lower))
+  if (
+    /\b[a-z0-9-]+\.(com|net|org|io|ai|internal|local|dev|cloud)\b/.test(lower)
+  )
     return true;
   // Dotted IPv4 or IPv6-ish tokens.
   if (/\b\d{1,3}(?:\.\d{1,3}){3}\b/.test(lower)) return true;
@@ -138,7 +141,9 @@ function messageLeaksInternals(message: string): boolean {
   // HTTP status codes / "status <n>" mentions.
   if (/\b(?:status\s*)?(?:[45]\d{2})\b/.test(lower)) return true;
   // Credential-like tokens (bearer/api key/secret/token=…).
-  if (/\b(bearer|api[_-]?key|secret|token|authorization|password)\b/.test(lower))
+  if (
+    /\b(bearer|api[_-]?key|secret|token|authorization|password)\b/.test(lower)
+  )
     return true;
   if (/[a-z0-9]{24,}/.test(lower)) return true; // long opaque token
   // Stack-trace markers.
@@ -199,25 +204,21 @@ const sanitisedCodeArb: fc.Arbitrary<string> = fc.constantFrom(
 describe('Feature: mss-livepulse, Property 15: AI failure never blocks the core flow', () => {
   it('every core operation succeeds identically across all AI failure modes', () => {
     fc.assert(
-      fc.property(
-        coreOperationArb,
-        fc.string(),
-        (operation, input) => {
-          // The AI-available baseline result for this operation + input.
-          const baseline = runCoreOperation(operation, input, 'available');
-          expect(baseline.ok).toBe(true);
-          expect(baseline.aiError).toBeNull();
+      fc.property(coreOperationArb, fc.string(), (operation, input) => {
+        // The AI-available baseline result for this operation + input.
+        const baseline = runCoreOperation(operation, input, 'available');
+        expect(baseline.ok).toBe(true);
+        expect(baseline.aiError).toBeNull();
 
-          // Injecting EVERY failure mode leaves the outcome byte-for-byte
-          // identical — the core flow is not blocked or altered by AI failure.
-          for (const mode of AI_FAILURE_MODES) {
-            const underFailure = runCoreOperation(operation, input, mode);
-            expect(underFailure).toEqual(baseline);
-            expect(underFailure.ok).toBe(true);
-            expect(underFailure.aiError).toBeNull();
-          }
-        },
-      ),
+        // Injecting EVERY failure mode leaves the outcome byte-for-byte
+        // identical — the core flow is not blocked or altered by AI failure.
+        for (const mode of AI_FAILURE_MODES) {
+          const underFailure = runCoreOperation(operation, input, mode);
+          expect(underFailure).toEqual(baseline);
+          expect(underFailure.ok).toBe(true);
+          expect(underFailure.aiError).toBeNull();
+        }
+      }),
       { numRuns: 1000 },
     );
   });

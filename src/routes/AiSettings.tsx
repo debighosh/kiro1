@@ -173,13 +173,14 @@ function indexFieldErrors(
 }
 
 /** Human-readable label for a connection-test outcome (sanitised). */
-const OUTCOME_LABELS: Readonly<Record<ConnectionTestResult['outcome'], string>> =
-  {
-    established: 'Connection established (provider reachable and compatible).',
-    reachable_but_incompatible:
-      'Provider reachable, but the structured-output check did not pass.',
-    failed: 'Connection failed.',
-  };
+const OUTCOME_LABELS: Readonly<
+  Record<ConnectionTestResult['outcome'], string>
+> = {
+  established: 'Connection established (provider reachable and compatible).',
+  reachable_but_incompatible:
+    'Provider reachable, but the structured-output check did not pass.',
+  failed: 'Connection failed.',
+};
 
 /** Human-readable label for each sanitised failure category. */
 const FAILURE_LABELS: Readonly<Record<string, string>> = {
@@ -413,7 +414,9 @@ export function AiSettings(): JSX.Element {
     [performSave],
   );
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault();
     if (isSaving) return;
     const input = validateForm();
@@ -884,8 +887,8 @@ export function AiSettings(): JSX.Element {
           ) : null}
           <p className="text-ink-muted">
             Saving with a credential entered will replace the stored credential.
-            Replacing or removing a credential requires a session verified within
-            the last {CREDENTIAL_ACTION_REVERIFY_WINDOW_SECONDS} seconds.
+            Replacing or removing a credential requires a session verified
+            within the last {CREDENTIAL_ACTION_REVERIFY_WINDOW_SECONDS} seconds.
           </p>
 
           {/* Remove control (Req 11.13 — explicit confirmation). */}
@@ -906,8 +909,8 @@ export function AiSettings(): JSX.Element {
                   className="flex flex-col gap-2 rounded border border-ink p-3"
                 >
                   <p className="text-ink">
-                    Remove the stored credential? AI operations that need it will
-                    stop working until a new credential is configured.
+                    Remove the stored credential? AI operations that need it
+                    will stop working until a new credential is configured.
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -1034,10 +1037,7 @@ export function AiSettings(): JSX.Element {
 
       {/* ── Connection test (Req 13.1, 25.7) ──────────────────────────────── */}
       <section aria-labelledby={`${formErrorId}-test`} className="mt-8">
-        <h2
-          id={`${formErrorId}-test`}
-          className="text-lg font-medium text-ink"
-        >
+        <h2 id={`${formErrorId}-test`} className="text-lg font-medium text-ink">
           Connection test
         </h2>
         <p className="mt-1 text-ink-muted">

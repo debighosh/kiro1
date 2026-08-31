@@ -225,9 +225,10 @@ describe('validateClusterMembership — every member must belong to the event (R
     const clusters: AiCluster[] = [
       { label: 'Group', question_ids: [UUID.a, UUID.c] },
     ];
-    expect(
-      validateClusterMembership(clusters, new Set(eventIds)),
-    ).toEqual({ valid: true, clusters });
+    expect(validateClusterMembership(clusters, new Set(eventIds))).toEqual({
+      valid: true,
+      clusters,
+    });
   });
 
   it('is trivially valid for an empty cluster list', () => {
@@ -295,7 +296,10 @@ describe('applyClusterCreation — additive; originals preserved (Req 16.4)', ()
   ];
 
   it('sets clusterId ONLY on the members and leaves other questions unchanged (Req 16.4)', () => {
-    const after = applyClusterCreation(questions, 'cluster-1', [UUID.a, UUID.b]);
+    const after = applyClusterCreation(questions, 'cluster-1', [
+      UUID.a,
+      UUID.b,
+    ]);
     const byId = new Map(after.map((q) => [q.id, q]));
     expect(byId.get(UUID.a)?.clusterId).toBe('cluster-1');
     expect(byId.get(UUID.b)?.clusterId).toBe('cluster-1');
@@ -304,7 +308,10 @@ describe('applyClusterCreation — additive; originals preserved (Req 16.4)', ()
   });
 
   it('keeps the SAME record set — nothing deleted/merged (Req 16.4)', () => {
-    const after = applyClusterCreation(questions, 'cluster-1', [UUID.a, UUID.b]);
+    const after = applyClusterCreation(questions, 'cluster-1', [
+      UUID.a,
+      UUID.b,
+    ]);
     expect(after).toHaveLength(questions.length);
     expect(preservesQuestionRecordSet(questions, after)).toBe(true);
   });
@@ -402,9 +409,9 @@ describe('preservesQuestionRecordSet — same id set before/after (Req 16.4, 16.
   });
 
   it('is false when a record was deleted (fewer records)', () => {
-    expect(preservesQuestionRecordSet(before, [{ id: UUID.a, clusterId: 'c1' }])).toBe(
-      false,
-    );
+    expect(
+      preservesQuestionRecordSet(before, [{ id: UUID.a, clusterId: 'c1' }]),
+    ).toBe(false);
   });
 
   it('is false when a foreign record was introduced (different id set)', () => {

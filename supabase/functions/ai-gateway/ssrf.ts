@@ -254,9 +254,7 @@ export function isAllowlisted(
 }
 
 export type SsrfDenyReason =
-  | 'invalid_scheme'
-  | 'no_resolved_ips'
-  | 'blocked_range';
+  'invalid_scheme' | 'no_resolved_ips' | 'blocked_range';
 
 export type SsrfDecision =
   | { readonly allowed: true }
@@ -270,7 +268,9 @@ export interface SsrfDecisionInput {
 }
 
 /** The PURE SSRF allow/deny decision — mirror of src/lib/ai/ssrf.ts. */
-export function evaluateSsrfDestination(input: SsrfDecisionInput): SsrfDecision {
+export function evaluateSsrfDestination(
+  input: SsrfDecisionInput,
+): SsrfDecision {
   if (!isAllowedScheme(input.scheme)) {
     return { allowed: false, reason: 'invalid_scheme' };
   }

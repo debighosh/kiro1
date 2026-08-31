@@ -163,10 +163,7 @@ export function schemaForJobType(jobType: string): z.ZodType | null {
  *                         here.
  */
 export type ValidationFailureReason =
-  | 'no_json'
-  | 'invalid_json'
-  | 'schema_violation'
-  | 'unsupported_job_type';
+  'no_json' | 'invalid_json' | 'schema_violation' | 'unsupported_job_type';
 
 /**
  * The result of validating a raw candidate against a job type's contract. A
@@ -268,7 +265,9 @@ export const MAX_STRUCTURED_OUTPUT_ATTEMPTS = 3;
  * retries; the caller rejects WITHOUT storing and returns a recoverable error
  * while leaving prior data unchanged (Req 14.4).
  */
-export function shouldRetryAfterValidationFailure(attemptCount: number): boolean {
+export function shouldRetryAfterValidationFailure(
+  attemptCount: number,
+): boolean {
   return (
     Number.isFinite(attemptCount) &&
     attemptCount >= 1 &&

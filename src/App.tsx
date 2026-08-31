@@ -105,10 +105,7 @@ function App(): JSX.Element {
           {/* End-of-event summary (task 34.4). Admin-only, inside the
               RequireAuth-guarded block; the more specific `/summary` path is
               registered before the `:id` editor for clarity. */}
-          <Route
-            path="/admin/events/:id/summary"
-            element={<AiSummary />}
-          />
+          <Route path="/admin/events/:id/summary" element={<AiSummary />} />
           <Route path="/admin/events/:id" element={<AdminEventEditor />} />
         </Route>
 

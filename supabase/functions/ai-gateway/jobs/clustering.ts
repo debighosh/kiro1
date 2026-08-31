@@ -478,7 +478,11 @@ export async function runClustering(
     aggregateMetadata: buildClusteringMetadata(approved.length),
   };
 
-  const validated = await runValidatedOperation(config, clusterRequest, recorder);
+  const validated = await runValidatedOperation(
+    config,
+    clusterRequest,
+    recorder,
+  );
   if (!validated.ok) {
     // Provider / timeout / validation failure — retain all originals unchanged,
     // create no clusters, return the sanitised error (Req 16.3-adjacent; the

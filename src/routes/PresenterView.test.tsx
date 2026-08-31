@@ -329,9 +329,7 @@ describe('PresenterView', () => {
     expect(
       await screen.findByTestId('presenter-ai-themes'),
     ).toBeInTheDocument();
-    expect(
-      screen.getByTestId('presenter-ai-themes-empty'),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('presenter-ai-themes-empty')).toBeInTheDocument();
     expect(
       screen.queryByTestId('presenter-waiting-mode'),
     ).not.toBeInTheDocument();

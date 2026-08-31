@@ -215,10 +215,30 @@ describe('computeCalculatedData — DB-derived totals & counts (Req 18.4)', () =
     const data = computeCalculatedData({
       event: EVENT,
       questions: [
-        question({ id: 'q1', status: 'answered', vote_count: 3, ai_category: 'Security' }),
-        question({ id: 'q2', status: 'approved', vote_count: 2, ai_category: 'Security' }),
-        question({ id: 'q3', status: 'featured', vote_count: 5, ai_category: 'Strategy' }),
-        question({ id: 'q4', status: 'pending', vote_count: 0, ai_category: null }),
+        question({
+          id: 'q1',
+          status: 'answered',
+          vote_count: 3,
+          ai_category: 'Security',
+        }),
+        question({
+          id: 'q2',
+          status: 'approved',
+          vote_count: 2,
+          ai_category: 'Security',
+        }),
+        question({
+          id: 'q3',
+          status: 'featured',
+          vote_count: 5,
+          ai_category: 'Strategy',
+        }),
+        question({
+          id: 'q4',
+          status: 'pending',
+          vote_count: 0,
+          ai_category: null,
+        }),
       ],
       polls: [
         { id: 'p1', question_text: 'Poll 1', response_count: 10 },
@@ -363,11 +383,15 @@ describe('describeAiUnavailable / indicationForCode — sanitised indication (Re
 
   it('classifies sanitised codes and produces the matching indication (Req 19.1, 19.2)', () => {
     expect(classifyFailureMode('timeout')).toBe('timeout');
-    expect(classifyFailureMode('credential_resolution_failed')).toBe('auth_failure');
+    expect(classifyFailureMode('credential_resolution_failed')).toBe(
+      'auth_failure',
+    );
     expect(classifyFailureMode('invalid_ai_response')).toBe('invalid_response');
     expect(classifyFailureMode('not_configured')).toBe('not_configured');
     // Unknown codes collapse to a generic 'unreachable' (never leak specifics).
-    expect(classifyFailureMode('some_unmapped_internal_code')).toBe('unreachable');
+    expect(classifyFailureMode('some_unmapped_internal_code')).toBe(
+      'unreachable',
+    );
 
     const indication = indicationForCode('timeout');
     expect(indication.mode).toBe('timeout');

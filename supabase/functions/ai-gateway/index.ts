@@ -221,8 +221,7 @@ function toActiveProviderConfig(row: ActiveConfigRow): ActiveProviderConfig {
 const DEGRADED_MESSAGE: Readonly<Record<DegradedReason, string>> = {
   ai_disabled:
     'AI features are currently unavailable. The rest of the app is unaffected.',
-  not_configured:
-    'AI is not configured. The rest of the app is unaffected.',
+  not_configured: 'AI is not configured. The rest of the app is unaffected.',
   credential_missing:
     'AI is not configured (a provider credential is required). The rest of the app is unaffected.',
 };
@@ -624,7 +623,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // without wiring — it fails safely with a sanitised recoverable error rather
   // than an unhandled pass-through. `runSingleAttempt` remains imported for this
   // guard and for the validated runner's per-attempt use.
-  const outcome = await runSingleAttempt(activeConfig, gatewayRequest, recorder);
+  const outcome = await runSingleAttempt(
+    activeConfig,
+    gatewayRequest,
+    recorder,
+  );
 
   if (outcome.ok) {
     return jsonResponse(

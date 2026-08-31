@@ -307,7 +307,9 @@ export class ClusterVoteModel {
    */
   addMember(questionId: string, voteCount: number): void {
     const safe =
-      typeof voteCount === 'number' && Number.isFinite(voteCount) && voteCount > 0
+      typeof voteCount === 'number' &&
+      Number.isFinite(voteCount) &&
+      voteCount > 0
         ? voteCount
         : 0;
     this.members.set(questionId, safe);
@@ -385,9 +387,7 @@ export function applyClusterCreation<T extends ClusterableQuestion>(
   }
   const members =
     memberIds instanceof Set ? memberIds : new Set<string>(memberIds);
-  return questions.map((q) =>
-    members.has(q.id) ? { ...q, clusterId } : q,
-  );
+  return questions.map((q) => (members.has(q.id) ? { ...q, clusterId } : q));
 }
 
 /**

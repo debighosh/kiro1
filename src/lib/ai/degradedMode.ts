@@ -235,8 +235,7 @@ export interface AiUnavailableIndication {
  * them names a provider, host, status code, or credential.
  */
 const AI_UNAVAILABLE_MESSAGE: Readonly<Record<AiFailureMode, string>> = {
-  not_configured:
-    'AI is not configured. The rest of the app is unaffected.',
+  not_configured: 'AI is not configured. The rest of the app is unaffected.',
   unreachable:
     'AI is currently unavailable. The rest of the app is unaffected.',
   auth_failure:
@@ -301,7 +300,9 @@ export function describeAiUnavailable(
  * "AI unavailable" indication in one step (Req 19.1, 19.2). Used by the Gateway
  * to turn any low-level failure code into the single client-facing indication.
  */
-export function indicationForCode(sanitisedCode: string): AiUnavailableIndication {
+export function indicationForCode(
+  sanitisedCode: string,
+): AiUnavailableIndication {
   return describeAiUnavailable(classifyFailureMode(sanitisedCode));
 }
 
@@ -335,7 +336,9 @@ export type PersistedState<T> = T;
  * tests assert `applyFailureToPersistedState(prior) === prior` (referential
  * identity) so any accidental copy/mutation would be caught.
  */
-export function applyFailureToPersistedState<T>(prior: PersistedState<T>): PersistedState<T> {
+export function applyFailureToPersistedState<T>(
+  prior: PersistedState<T>,
+): PersistedState<T> {
   // Identity: on failure the persisted set is UNCHANGED (Req 19.5, 19.6). We do
   // NOT clone — returning the SAME reference proves no mutation/replacement.
   return prior;
@@ -346,9 +349,7 @@ export function applyFailureToPersistedState<T>(prior: PersistedState<T>): Persi
  * schema-valid) output is persistable; a failure/partial/invalid output is NOT
  * (Req 19.6). PURE — the caller passes the validation verdict.
  */
-export function mayPersistAiOutput(outcome: {
-  readonly ok: boolean;
-}): boolean {
+export function mayPersistAiOutput(outcome: { readonly ok: boolean }): boolean {
   return outcome.ok === true;
 }
 

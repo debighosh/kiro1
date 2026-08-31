@@ -47,9 +47,7 @@
 //  Design references: Server-Side AI Gateway Design (Connection test).
 // =============================================================================
 
-import {
-  CredentialResolutionError,
-} from '../_shared/aiCredential.ts';
+import { CredentialResolutionError } from '../_shared/aiCredential.ts';
 import { DisallowedDestinationError } from './ssrf.ts';
 import { ProviderCallError } from './adapter.ts';
 import {
@@ -77,9 +75,7 @@ import { validateStructuredOutput } from './structuredOutput.ts';
  *                                   `failure_category`).
  */
 export type ConnectionTestOutcome =
-  | 'established'
-  | 'reachable_but_incompatible'
-  | 'failed';
+  'established' | 'reachable_but_incompatible' | 'failed';
 
 /**
  * Fixed, credential-free failure categories (Req 13.3). NEVER a raw diagnostic,
@@ -248,7 +244,11 @@ export async function runConnectionTest(
   await recorder.markRunning(1);
 
   // ---- STEP 1: connection test (Req 13.2, 13.4) ----------------------------
-  let step1: { text: string; statusCategory: ConnectionTestResult['status_category']; roundTripMs: number };
+  let step1: {
+    text: string;
+    statusCategory: ConnectionTestResult['status_category'];
+    roundTripMs: number;
+  };
   try {
     const result = await runPreflightedProviderCall(
       config,
@@ -271,7 +271,12 @@ export async function runConnectionTest(
 
   // A completed call with an EMPTY response is NOT a usable response (Req 13.4).
   if (step1.text.trim().length === 0) {
-    return failResult(recorder, modelId, 'invalid_response', step1.statusCategory);
+    return failResult(
+      recorder,
+      modelId,
+      'invalid_response',
+      step1.statusCategory,
+    );
   }
 
   // ---- STEP 2: representative structured-output test (Req 13.11) ------------

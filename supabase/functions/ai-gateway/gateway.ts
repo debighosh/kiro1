@@ -164,9 +164,7 @@ export const DEFAULT_REQUEST_TIMEOUT_SECONDS = 30;
 // -----------------------------------------------------------------------------
 
 export type DegradedReason =
-  | 'ai_disabled'
-  | 'not_configured'
-  | 'credential_missing';
+  'ai_disabled' | 'not_configured' | 'credential_missing';
 
 export interface DegradedOutcome {
   readonly available: false;
@@ -207,8 +205,7 @@ export function hasStoredCredential(config: {
     typeof config.secretReference === 'string' &&
     config.secretReference.length > 0;
   const hasEnc =
-    config.encryptedCredential != null &&
-    config.encryptedCredential.length > 0;
+    config.encryptedCredential != null && config.encryptedCredential.length > 0;
   return hasRef || hasEnc;
 }
 
@@ -310,10 +307,7 @@ export function resolveTimeoutMs(requestTimeoutSeconds: unknown): number {
     Number.isFinite(requestTimeoutSeconds)
       ? requestTimeoutSeconds
       : DEFAULT_REQUEST_TIMEOUT_SECONDS;
-  const clamped = Math.min(
-    Math.max(raw, 1),
-    MAX_REQUEST_TIMEOUT_SECONDS,
-  );
+  const clamped = Math.min(Math.max(raw, 1), MAX_REQUEST_TIMEOUT_SECONDS);
   return Math.floor(clamped * 1000);
 }
 
@@ -942,7 +936,6 @@ export async function runValidatedOperation(
   };
 }
 
-
 // -----------------------------------------------------------------------------
 // Manual retry entry point (task 33.2, Req 19.4).
 //
@@ -989,7 +982,12 @@ export async function runManualRetry(
   }
 
   // EXACTLY ONE attempt (plan.attempts === 1, Req 19.4).
-  const outcome = await runSingleAttempt(config, request, recorder, plan.attempts);
+  const outcome = await runSingleAttempt(
+    config,
+    request,
+    recorder,
+    plan.attempts,
+  );
 
   // A transport/timeout/SSRF failure is terminal and already recorded — surface
   // it unchanged; no automatic retry follows a manual retry (Req 19.4, 19.1).
@@ -998,10 +996,16 @@ export async function runManualRetry(
   }
 
   // Validate the single response server-side BEFORE any storing (Req 14.2).
-  const validation = validateStructuredOutput(request.jobType, outcome.result.text);
+  const validation = validateStructuredOutput(
+    request.jobType,
+    outcome.result.text,
+  );
   if (validation.valid) {
     await recorder.markSucceeded(plan.attempts, config.modelId);
-    return { ok: true, result: { data: validation.data, attemptCount: plan.attempts } };
+    return {
+      ok: true,
+      result: { data: validation.data, attemptCount: plan.attempts },
+    };
   }
 
   // Validation failed on the single manual attempt → do NOT retry (Req 19.4),

@@ -938,7 +938,6 @@ describe('Milestone 3 schema / migrations (Polls & Word Cloud tables)', () => {
   });
 });
 
-
 /**
  * Task 26.4 — Milestone 4 (AI Features) schema / migration verification.
  *

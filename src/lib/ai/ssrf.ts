@@ -369,9 +369,7 @@ export function isAllowlisted(
  *                         (Req 13.7, 13.9, 13.12).
  */
 export type SsrfDenyReason =
-  | 'invalid_scheme'
-  | 'no_resolved_ips'
-  | 'blocked_range';
+  'invalid_scheme' | 'no_resolved_ips' | 'blocked_range';
 
 /** The result of the pure SSRF decision — allow, or deny with a reason. */
 export type SsrfDecision =
@@ -409,7 +407,9 @@ export interface SsrfDecisionInput {
  *      resolved IP is blocked-and-not-allowlisted the whole destination is
  *      denied `blocked_range` (Req 13.7, 13.9, 13.12).
  */
-export function evaluateSsrfDestination(input: SsrfDecisionInput): SsrfDecision {
+export function evaluateSsrfDestination(
+  input: SsrfDecisionInput,
+): SsrfDecision {
   if (!isAllowedScheme(input.scheme)) {
     return { allowed: false, reason: 'invalid_scheme' };
   }

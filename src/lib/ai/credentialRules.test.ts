@@ -256,7 +256,11 @@ describe('prepareCredentialForStorage — never embeds plaintext (Req 12.4)', ()
 
   it('throws the generic error when a fallback is needed but no key is given', async () => {
     await expect(
-      prepareCredentialForStorage('needs-a-key', { secretReference: null }, null),
+      prepareCredentialForStorage(
+        'needs-a-key',
+        { secretReference: null },
+        null,
+      ),
     ).rejects.toBeInstanceOf(CredentialResolutionError);
   });
 

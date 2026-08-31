@@ -278,10 +278,7 @@ describe('chunkForCategorisation — chunks ≤100, order preserved (Req 15.1)',
 // ===========================================================================
 describe('computeOverride — valid override records the prior category (Req 15.7)', () => {
   it('applies a valid override, setting the new category and recording the current as ai_prior_category', () => {
-    const outcome = computeOverride(
-      { ai_category: 'Technology' },
-      'Security',
-    );
+    const outcome = computeOverride({ ai_category: 'Technology' }, 'Security');
     expect(outcome.applied).toBe(true);
     if (outcome.applied) {
       expect(outcome.patch).toEqual({
