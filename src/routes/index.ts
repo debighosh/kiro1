@@ -29,3 +29,11 @@ export { AiSettings } from './AiSettings';
 // The end-of-event summary screen (task 34.4) lives in its own module and is
 // re-exported here for the single `../routes` import surface in App.tsx.
 export { AiSummary } from './AiSummary';
+
+// The admin analytics dashboard (task 38.3) lives in its own module and is
+// re-exported here for the single `../routes` import surface in App.tsx.
+export { AnalyticsDashboard } from './AnalyticsDashboard';
+
+// The admin export panel (task 38.4) lives in its own module and is
+// re-exported here for the single `../routes` import surface in App.tsx.
+export { ExportPanel } from './ExportPanel';

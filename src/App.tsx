@@ -11,6 +11,8 @@ import {
   ModerationQueue,
   AiSettings,
   AiSummary,
+  AnalyticsDashboard,
+  ExportPanel,
   PresenterView,
   NotFound,
 } from './routes';
@@ -106,6 +108,17 @@ function App(): JSX.Element {
               RequireAuth-guarded block; the more specific `/summary` path is
               registered before the `:id` editor for clarity. */}
           <Route path="/admin/events/:id/summary" element={<AiSummary />} />
+          {/* Admin analytics dashboard (task 38.3). Registered BEFORE the
+              generic `:id` editor catch-all so the more specific `/analytics`
+              path is never masked by the editor route (Req 8.4, 24.7). */}
+          <Route
+            path="/admin/events/:id/analytics"
+            element={<AnalyticsDashboard />}
+          />
+          {/* Admin export panel (task 38.4). Registered BEFORE the generic
+              `:id` editor catch-all so the more specific `/exports` path is
+              never masked (Req 9.1–9.4, 24.7, 25.6). */}
+          <Route path="/admin/events/:id/exports" element={<ExportPanel />} />
           <Route path="/admin/events/:id" element={<AdminEventEditor />} />
         </Route>
 

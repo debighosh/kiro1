@@ -454,3 +454,74 @@ describe('moderateQuestion — error mapping', () => {
     ).rejects.toMatchObject({ kind: 'validation', status: 400 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 42.3 — Additional negative tests for uncovered branches
+// (lines ~474–491: Response context with no JSON body, and success-channel
+// error body detection)
+// ---------------------------------------------------------------------------
+describe('moderateQuestion — additional error-path coverage (Req 26.1)', () => {
+  beforeEach(() => {
+    getSessionMock.mockResolvedValue(FAKE_SESSION);
+  });
+
+  it('throws unauthorized for a 401 Response context with no JSON body', async () => {
+    // Simulate a FunctionsHttpError whose context.clone().json() rejects
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'FunctionsHttpError',
+        message: 'Edge Function returned a non-2xx status code',
+        context: new Response('not json', { status: 401 }),
+      },
+    });
+    await expect(
+      moderateQuestion({ questionId: 'q-1', action: 'approve' }),
+    ).rejects.toMatchObject({ kind: 'unauthorized', status: 401 });
+  });
+
+  it('throws unknown for a non-401 Response context with no JSON body', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'FunctionsHttpError',
+        message: 'Edge Function returned a non-2xx status code',
+        context: new Response('not json', { status: 503 }),
+      },
+    });
+    await expect(
+      moderateQuestion({ questionId: 'q-1', action: 'approve' }),
+    ).rejects.toMatchObject({ kind: 'unknown', status: 503 });
+  });
+
+  it('throws unknown for a transport error with no Response context', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: { message: 'network failure' }, // no .context
+    });
+    await expect(
+      moderateQuestion({ questionId: 'q-1', action: 'approve' }),
+    ).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('throws from the structured error body in the success channel', async () => {
+    // invokeMock resolves (no error) but data contains an error body
+    invokeMock.mockResolvedValue({
+      data: { error: { code: 'question_not_found', message: 'gone' } },
+      error: null,
+    });
+    await expect(
+      moderateQuestion({ questionId: 'missing', action: 'hide' }),
+    ).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('throws unknown for a malformed success payload', async () => {
+    invokeMock.mockResolvedValue({
+      data: { unexpected: 'structure' },
+      error: null,
+    });
+    await expect(
+      moderateQuestion({ questionId: 'q-1', action: 'approve' }),
+    ).rejects.toMatchObject({ kind: 'unknown' });
+  });
+});
