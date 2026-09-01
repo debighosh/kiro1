@@ -38,6 +38,20 @@ import { PollCard } from '../components/PollCard';
 import { WordCloudCard } from '../components/WordCloudCard';
 import { ConnectionStatusIndicator } from '../components/ConnectionStatusIndicator';
 import { useRealtimeChannel } from '../hooks/useRealtimeChannel';
+import { cx, FOCUS_RING } from '../lib/a11y';
+/*
+ * Req 24.6 — reduced motion: no JS-driven animation is used in any screen in
+ * this file. All CSS transitions and animations are covered by the global
+ * `@media (prefers-reduced-motion: reduce)` rule in `src/index.css`, which
+ * unconditionally disables them when the user has requested reduced motion.
+ * Screens that would add JS-controlled animation (e.g. recharts or a
+ * third-party word-cloud library) MUST import `usePrefersReducedMotion` from
+ * `../hooks/usePrefersReducedMotion` and guard each animation prop.
+ *
+ * Req 24.8 — no `participant_identifier` in DOM: `getParticipantIdentifier()`
+ * is called for its side effect only; the return value is intentionally
+ * discarded in EventView so the identifier can never reach the UI.
+ */
 
 /**
  * Minimal placeholder screens for the Milestone 1 routing skeleton (task 1.3).
@@ -404,11 +418,13 @@ export function EventView(): JSX.Element {
                   aria-selected={selected}
                   aria-controls={`panel-${view.key}`}
                   onClick={() => setActiveView(view.key)}
-                  className={`touch-target rounded px-4 py-2 font-medium ${
+                  className={cx(
+                    'touch-target rounded px-4 py-2 font-medium',
                     selected
                       ? 'bg-focus text-surface'
-                      : 'border border-ink-muted/40 text-ink'
-                  }`}
+                      : 'border border-ink-muted text-ink',
+                    FOCUS_RING,
+                  )}
                 >
                   {view.label}
                 </button>
@@ -549,6 +565,9 @@ function toDisplayMessage(error: unknown): string {
 export function AdminLogin(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
+  // Req 24.6: no JS-driven animation in this form; the global CSS
+  // `@media (prefers-reduced-motion: reduce)` rule in index.css covers all
+  // CSS transitions. No JS animation guard needed here.
 
   // Stable, unique ids so labels associate with their inputs even if multiple
   // instances mount (Req 24.5).
@@ -629,7 +648,10 @@ export function AdminLogin(): JSX.Element {
             disabled={isSubmitting}
             aria-invalid={status === 'error' ? true : undefined}
             aria-describedby={status === 'error' ? errorId : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
         </div>
 
@@ -648,7 +670,10 @@ export function AdminLogin(): JSX.Element {
             disabled={isSubmitting}
             aria-invalid={status === 'error' ? true : undefined}
             aria-describedby={status === 'error' ? errorId : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
         </div>
 
@@ -671,7 +696,10 @@ export function AdminLogin(): JSX.Element {
           type="submit"
           disabled={isSubmitting}
           aria-busy={isSubmitting}
-          className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+          className={cx(
+            'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+            FOCUS_RING,
+          )}
         >
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>

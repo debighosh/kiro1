@@ -71,6 +71,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { cx, FOCUS_RING } from '../lib/a11y';
 import {
   aggregateWordCloud,
   normalise,
@@ -174,13 +175,13 @@ function WordCloudVisualisation({
       */}
       <div
         aria-hidden={true}
-        className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+        className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1"
         data-testid="word-cloud-terms"
       >
         {terms.map((term) => (
           <span
             key={term.term}
-            className="font-medium leading-none text-ink"
+            className="min-w-0 break-all font-medium leading-none text-ink"
             style={{ fontSize: `${term.size}px` }}
             data-testid="word-cloud-term"
             data-term={term.term}
@@ -485,7 +486,10 @@ export function WordCloudCard({
             disabled={submitting}
             aria-invalid={isError ? true : undefined}
             aria-describedby={describedBy || undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target w-full rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
             placeholder="Type a word or short phrase…"
           />
           {/* Character count / limit hint (Req 24.7 informative state). */}
@@ -535,7 +539,10 @@ export function WordCloudCard({
           type="submit"
           disabled={submitDisabled}
           aria-busy={submitting}
-          className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+          className={cx(
+            'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+            FOCUS_RING,
+          )}
         >
           {submitting
             ? 'Submitting…'

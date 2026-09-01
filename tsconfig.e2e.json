@@ -1,0 +1,35 @@
+{
+  /*
+   * Task 41.1 — TypeScript config for the Playwright E2E harness.
+   *
+   * The Playwright config + fixtures + `*.e2e.ts` specs are a SEPARATE runner
+   * from both the production app build and the Vitest suite:
+   *   - `tsc -b` (npm run build) drives tsconfig.app.json (`include: ["src"]`)
+   *     and tsconfig.node.json (`include: ["vite.config.ts"]`), so neither
+   *     compiles `e2e/**` or `playwright.config.ts`. This config is
+   *     intentionally NOT wired into the root tsconfig.json `references`, so
+   *     `npm run build` never touches E2E files.
+   *   - tsconfig.test.json (`npm run typecheck:test`) only includes `src/**`
+   *     test files, so it does not typecheck E2E either.
+   *
+   * This config exists so the E2E files CAN be typechecked on demand (e.g. in
+   * an E2E CI job) via `tsc -p tsconfig.e2e.json`, pulling in Node types and
+   * @playwright/test's own bundled types (DOM/page APIs come from Playwright).
+   */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts", "playwright.config.ts"]
+}

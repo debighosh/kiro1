@@ -6,6 +6,12 @@ import {
   type EventSummary,
   type SummaryResponse,
 } from '../lib/aiClient';
+import { cx, FOCUS_RING } from '../lib/a11y';
+// Req 24.6: no JS-driven animation in this component; the global CSS
+// `@media (prefers-reduced-motion: reduce)` rule in index.css covers all CSS
+// transitions. No JS animation guard is needed here.
+// Req 24.8: `participant_identifier` is never read nor rendered here; only
+// aggregated event data (question count, markdown report) flows through.
 
 /**
  * `/admin/events/:id/summary` — the admin-only end-of-event summary screen
@@ -113,7 +119,10 @@ export function AiSummary(): JSX.Element {
         onClick={() => void handleGenerate()}
         disabled={isGenerating}
         aria-busy={isGenerating}
-        className="touch-target mt-4 rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+        className={cx(
+          'touch-target mt-4 rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+          FOCUS_RING,
+        )}
       >
         {isGenerating ? 'Generating…' : 'Generate summary'}
       </button>
@@ -125,11 +134,23 @@ export function AiSummary(): JSX.Element {
         </p>
       ) : null}
 
-      {/* ERROR state (Req 24.7). */}
+      {/* ERROR state (Req 24.7) with retry action. */}
       {status === 'error' && error ? (
-        <p role="alert" className="mt-4 text-ink">
-          {error}
-        </p>
+        <div className="mt-4 flex flex-col gap-3">
+          <p role="alert" className="text-ink">
+            {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleGenerate()}
+            className={cx(
+              'touch-target self-start rounded bg-focus px-4 py-2 font-medium text-surface',
+              FOCUS_RING,
+            )}
+          >
+            Try again
+          </button>
+        </div>
       ) : null}
 
       {/* DONE — degraded (AI not enabled/configured; Req 19.1). */}

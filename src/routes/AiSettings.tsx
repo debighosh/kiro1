@@ -26,6 +26,12 @@ import {
   type AiProviderSettingsInput,
   type AiProviderType,
 } from '../schemas/ai';
+import { cx, FOCUS_RING } from '../lib/a11y';
+// Req 24.6: no JS-driven animation in this component; the global CSS
+// `@media (prefers-reduced-motion: reduce)` rule in index.css covers all CSS
+// transitions. No JS animation guard is needed here.
+// Req 24.8: `participant_identifier` is never read nor rendered here; only
+// AI provider configuration (no user data) flows through this component.
 
 /**
  * `/admin/ai-settings` — the admin-only AI provider settings / config screen
@@ -514,7 +520,10 @@ export function AiSettings(): JSX.Element {
         <button
           type="button"
           onClick={() => void loadSettings()}
-          className="touch-target mt-4 rounded bg-focus px-4 py-2 font-medium text-surface"
+          className={cx(
+            'touch-target mt-4 rounded bg-focus px-4 py-2 font-medium text-surface',
+            FOCUS_RING,
+          )}
         >
           Retry
         </button>
@@ -574,7 +583,10 @@ export function AiSettings(): JSX.Element {
             aria-describedby={
               displayNameError ? `${displayNameId}-error` : undefined
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {displayNameError ? (
             <p id={`${displayNameId}-error`} role="alert" className="text-ink">
@@ -592,7 +604,7 @@ export function AiSettings(): JSX.Element {
             checked={values.ai_enabled}
             onChange={(e) => update('ai_enabled', e.target.checked)}
             disabled={isSaving}
-            className="touch-target"
+            className={cx('touch-target', FOCUS_RING)}
           />
           <label htmlFor={aiEnabledId} className="font-medium text-ink">
             AI features enabled
@@ -612,7 +624,10 @@ export function AiSettings(): JSX.Element {
               update('provider_type', e.target.value as AiProviderType)
             }
             disabled={isSaving}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           >
             <option value="openai_compatible">OpenAI-compatible</option>
             <option value="custom_adapter">Custom adapter</option>
@@ -636,7 +651,10 @@ export function AiSettings(): JSX.Element {
             disabled={isSaving}
             aria-invalid={baseUrlError ? true : undefined}
             aria-describedby={baseUrlError ? `${baseUrlId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {baseUrlError ? (
             <p id={`${baseUrlId}-error`} role="alert" className="text-ink">
@@ -660,7 +678,10 @@ export function AiSettings(): JSX.Element {
             disabled={isSaving}
             aria-invalid={chatPathError ? true : undefined}
             aria-describedby={chatPathError ? `${chatPathId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {chatPathError ? (
             <p id={`${chatPathId}-error`} role="alert" className="text-ink">
@@ -680,7 +701,10 @@ export function AiSettings(): JSX.Element {
             value={values.auth_type}
             onChange={(e) => update('auth_type', e.target.value as AiAuthType)}
             disabled={isSaving}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           >
             <option value="bearer">Bearer token</option>
             <option value="api_key_header">API key header</option>
@@ -712,7 +736,10 @@ export function AiSettings(): JSX.Element {
                   ? `${apiKeyHeaderNameId}-error`
                   : undefined
               }
-              className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+              className={cx(
+                'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+                FOCUS_RING,
+              )}
             />
             {apiKeyHeaderNameError ? (
               <p
@@ -741,7 +768,10 @@ export function AiSettings(): JSX.Element {
             disabled={isSaving}
             aria-invalid={modelIdError ? true : undefined}
             aria-describedby={modelIdError ? `${modelIdId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {modelIdError ? (
             <p id={`${modelIdId}-error`} role="alert" className="text-ink">
@@ -770,7 +800,10 @@ export function AiSettings(): JSX.Element {
             aria-describedby={
               temperatureError ? `${temperatureId}-error` : undefined
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {temperatureError ? (
             <p id={`${temperatureId}-error`} role="alert" className="text-ink">
@@ -799,7 +832,10 @@ export function AiSettings(): JSX.Element {
             aria-describedby={
               maxTokensError ? `${maxTokensId}-error` : undefined
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {maxTokensError ? (
             <p id={`${maxTokensId}-error`} role="alert" className="text-ink">
@@ -826,7 +862,10 @@ export function AiSettings(): JSX.Element {
             disabled={isSaving}
             aria-invalid={timeoutError ? true : undefined}
             aria-describedby={timeoutError ? `${timeoutId}-error` : undefined}
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {timeoutError ? (
             <p id={`${timeoutId}-error`} role="alert" className="text-ink">
@@ -844,7 +883,7 @@ export function AiSettings(): JSX.Element {
             checked={values.tls_verify_required}
             onChange={(e) => update('tls_verify_required', e.target.checked)}
             disabled={isSaving}
-            className="touch-target"
+            className={cx('touch-target', FOCUS_RING)}
           />
           <label htmlFor={tlsVerifyId} className="font-medium text-ink">
             Require TLS certificate verification
@@ -878,7 +917,10 @@ export function AiSettings(): JSX.Element {
             aria-describedby={
               credentialError ? `${credentialId}-error` : undefined
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
           {credentialError ? (
             <p id={`${credentialId}-error`} role="alert" className="text-ink">
@@ -898,7 +940,10 @@ export function AiSettings(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => void handleRemoveClick()}
-                  className="touch-target rounded border border-ink px-4 py-2 font-medium text-ink"
+                  className={cx(
+                    'touch-target rounded border border-ink px-4 py-2 font-medium text-ink',
+                    FOCUS_RING,
+                  )}
                 >
                   Remove credential
                 </button>
@@ -916,14 +961,20 @@ export function AiSettings(): JSX.Element {
                     <button
                       type="button"
                       onClick={() => void performRemove()}
-                      className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface"
+                      className={cx(
+                        'touch-target rounded bg-focus px-4 py-2 font-medium text-surface',
+                        FOCUS_RING,
+                      )}
                     >
                       Confirm remove
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmRemove(false)}
-                      className="touch-target rounded border border-ink-muted px-4 py-2 font-medium text-ink"
+                      className={cx(
+                        'touch-target rounded border border-ink-muted px-4 py-2 font-medium text-ink',
+                        FOCUS_RING,
+                      )}
                     >
                       Cancel
                     </button>
@@ -960,7 +1011,10 @@ export function AiSettings(): JSX.Element {
               autoComplete="email"
               value={reverifyEmail}
               onChange={(e) => setReverifyEmail(e.target.value)}
-              className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+              className={cx(
+                'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+                FOCUS_RING,
+              )}
             />
             <label htmlFor={reverifyPasswordId} className="text-ink">
               Password
@@ -971,7 +1025,10 @@ export function AiSettings(): JSX.Element {
               autoComplete="current-password"
               value={reverifyPassword}
               onChange={(e) => setReverifyPassword(e.target.value)}
-              className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+              className={cx(
+                'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+                FOCUS_RING,
+              )}
             />
             {reverifyError ? (
               <p role="alert" className="text-ink">
@@ -984,7 +1041,10 @@ export function AiSettings(): JSX.Element {
                 disabled={reverifying}
                 aria-busy={reverifying}
                 onClick={() => void handleReverify()}
-                className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+                className={cx(
+                  'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+                  FOCUS_RING,
+                )}
               >
                 {reverifying ? 'Verifying…' : 'Re-verify'}
               </button>
@@ -996,7 +1056,10 @@ export function AiSettings(): JSX.Element {
                   setPendingSaveInput(null);
                   setReverifyPassword('');
                 }}
-                className="touch-target rounded border border-ink-muted px-4 py-2 font-medium text-ink"
+                className={cx(
+                  'touch-target rounded border border-ink-muted px-4 py-2 font-medium text-ink',
+                  FOCUS_RING,
+                )}
               >
                 Cancel
               </button>
@@ -1020,7 +1083,10 @@ export function AiSettings(): JSX.Element {
           type="submit"
           disabled={isSaving}
           aria-busy={isSaving}
-          className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+          className={cx(
+            'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+            FOCUS_RING,
+          )}
         >
           {isSaving
             ? 'Saving…'
@@ -1049,7 +1115,10 @@ export function AiSettings(): JSX.Element {
           onClick={() => void handleConnectionTest()}
           disabled={isTesting}
           aria-busy={isTesting}
-          className="touch-target mt-3 rounded border border-ink px-4 py-2 font-medium text-ink disabled:opacity-60"
+          className={cx(
+            'touch-target mt-3 rounded border border-ink px-4 py-2 font-medium text-ink disabled:opacity-60',
+            FOCUS_RING,
+          )}
         >
           {isTesting ? 'Testing…' : 'Run connection test'}
         </button>
@@ -1061,9 +1130,22 @@ export function AiSettings(): JSX.Element {
         ) : null}
 
         {testStatus === 'error' && testError ? (
-          <p role="alert" className="mt-3 text-ink">
-            {testError}
-          </p>
+          <div className="mt-3 flex flex-col gap-3">
+            <p role="alert" className="text-ink">
+              {testError}
+            </p>
+            {/* Retry action for the connection test error state (Req 24.7). */}
+            <button
+              type="button"
+              onClick={() => void handleConnectionTest()}
+              className={cx(
+                'touch-target self-start rounded border border-ink px-4 py-2 font-medium text-ink',
+                FOCUS_RING,
+              )}
+            >
+              Retry connection test
+            </button>
+          </div>
         ) : null}
 
         {testStatus === 'done' && testResult ? (

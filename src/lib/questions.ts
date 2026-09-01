@@ -27,14 +27,27 @@
  * for fast feedback (Req 22.1, 3.2), avoiding an obviously-doomed round-trip;
  * the RPC re-validates authoritatively so this is defence-in-depth only.
  *
+ * Alongside the length check, the shared {@link sanitise} allow-list guard
+ * (`./sanitise`, task 39.2) is applied to the question text as an ADDITIONAL
+ * client-side line of defence-in-depth (Req 21.9, 21.11, 21.12, 22.7). It is
+ * NOT authoritative — the DB `char_length` CHECK constraint and the
+ * `submit_question` RPC's server-side validation remain the source of truth;
+ * this pre-flight simply rejects the WHOLE submission (no RPC call) with a
+ * user-safe {@link QuestionError} naming the field + limit when the text is
+ * over-length or contains a disallowed (e.g. control) character, and the caller
+ * retains the entered values so they can be re-displayed (Req 21.11, 22.7).
+ *
  * A per-attempt `submission_key` (crypto-random) is generated and passed for
  * write idempotency (Req 23.8): a retried submit that reuses the same key is
  * de-duplicated server-side rather than creating a duplicate question.
  *
- * Requirements traceability: 3.1, 3.2, 3.3, 3.13, 22.1, 23.8.
+ * Requirements traceability: 3.1, 3.2, 3.3, 3.13, 22.1, 23.8, 21.9, 21.11,
+ * 21.12, 22.7.
  * Design references: Request/data flows (Question submit + moderation);
- * Components (`QuestionSubmissionForm`); RLS Design (server-side submit RPC /
- * rate limiting).
+ * Components (`QuestionSubmissionForm`); Error Handling (Validation errors —
+ * shared schemas; allow-list + length cap before persistence, reject whole
+ * submission with field + limit); RLS Design (server-side submit RPC / rate
+ * limiting).
  *
  * IMPORTANT — the participant identifier is opaque and MUST NEVER be rendered
  * in the UI (Req 8.6, 24.8). This module only hands it to the RPC as a
@@ -43,6 +56,7 @@
 
 import { supabase } from './supabaseClient';
 import { getParticipantIdentifier } from './participant';
+import { sanitise, PLAIN_TEXT_ALLOW_LIST } from './sanitise';
 
 /** Minimum question length in Unicode code points (Req 22.1, 3.1). */
 export const QUESTION_TEXT_MIN = 1;
@@ -231,15 +245,25 @@ function isQuestionRow(
  *  1. Validate length 1–300 Unicode code points client-side for fast feedback
  *     (Req 22.1, 3.2). On failure, throw a {@link QuestionError} of kind
  *     `invalid_length` — no RPC call is made.
- *  2. Resolve (or reuse) an idempotency `submission_key` (Req 23.8) and the
+ *  2. Apply the shared {@link sanitise} allow-list guard to the trimmed text as
+ *     defence-in-depth (Req 21.9, 21.11, 21.12, 22.7). The `maxLength` passed is
+ *     the field's EXACT DB limit ({@link QUESTION_TEXT_MAX} = 300), NOT the
+ *     module-level {@link DEFAULT_MAX_LENGTH} of 500 — the 500 default only
+ *     applies when a caller omits `maxLength`. Because the 1–300 length check in
+ *     step 1 already ran, sanitise's own length failure is effectively
+ *     unreachable here; a `disallowed_char` failure (e.g. a control character
+ *     that passed the length check) rejects the WHOLE submission with a
+ *     field/limit-naming {@link QuestionError} and NO RPC call is made, so the
+ *     caller retains the entered values (Req 21.11, 22.7).
+ *  3. Resolve (or reuse) an idempotency `submission_key` (Req 23.8) and the
  *     opaque participant identifier via {@link getParticipantIdentifier}.
- *  3. Call `supabase.rpc('submit_question', …)`.
- *  4. On success return the created question `{ id, status }`; on the RPC's
+ *  4. Call `supabase.rpc('submit_question', …)`.
+ *  5. On success return the created question `{ id, status }`; on the RPC's
  *     signalled rejection map it to a typed {@link QuestionError}.
  *
- * @throws {QuestionError} on client-side length failure, an RPC rejection
- *   signal (`rate_limited` / `event_not_live` / `invalid_length`), a malformed
- *   response, or any transport failure.
+ * @throws {QuestionError} on a client-side length or allow-list failure, an RPC
+ *   rejection signal (`rate_limited` / `event_not_live` / `invalid_length`), a
+ *   malformed response, or any transport failure.
  */
 export async function submitQuestion(
   input: SubmitQuestionInput,
@@ -247,21 +271,40 @@ export async function submitQuestion(
   const { eventId, text } = input;
 
   // 1) Client-side length validation (fast feedback; the RPC re-validates).
+  //    Kept FIRST so an over-length value yields the canonical length message.
   if (!isValidQuestionLength(text)) {
     throw new QuestionError(QUESTION_LENGTH_MESSAGE, {
       kind: 'invalid_length',
     });
   }
 
-  // 2) Idempotency key (reuse the caller's key on a retry) + opaque identifier.
+  // 2) Allow-list sanitisation as defence-in-depth (Req 21.9, 21.11, 21.12,
+  //    22.7) — reject the whole submission (no RPC) if the text contains a
+  //    disallowed character. Pass the field's EXACT DB limit (300), not the
+  //    module-level 500 default. The DB CHECK + RPC remain authoritative.
+  const sanitiseResult = sanitise(text.trim(), {
+    field: 'question',
+    maxLength: QUESTION_TEXT_MAX,
+    allowList: PLAIN_TEXT_ALLOW_LIST,
+  });
+  if (!sanitiseResult.ok) {
+    throw new QuestionError(
+      sanitiseResult.reason.kind === 'too_long'
+        ? QUESTION_LENGTH_MESSAGE
+        : `Your question contains a character that is not allowed (max ${QUESTION_TEXT_MAX} characters).`,
+      { kind: 'invalid_length' },
+    );
+  }
+
+  // 3) Idempotency key (reuse the caller's key on a retry) + opaque identifier.
   const submissionKey = input.submissionKey ?? generateSubmissionKey();
   const participantIdentifier = getParticipantIdentifier();
 
   // Send the trimmed text so leading/trailing whitespace does not count toward
-  // the stored length (consistent with the length check above).
+  // the stored length (consistent with the length + sanitise checks above).
   const trimmed = text.trim();
 
-  // 3) Invoke the RPC.
+  // 4) Invoke the RPC.
   const { data, error } = await supabase.rpc(SUBMIT_QUESTION_RPC, {
     p_event_id: eventId,
     p_participant_identifier: participantIdentifier,
@@ -269,12 +312,12 @@ export async function submitQuestion(
     p_submission_key: submissionKey,
   });
 
-  // 4a) Map a signalled rejection to a typed error.
+  // 5a) Map a signalled rejection to a typed error.
   if (error) {
     throw toQuestionError(error);
   }
 
-  // 4b) `RETURNS questions` yields the row (or an array containing it in some
+  // 5b) `RETURNS questions` yields the row (or an array containing it in some
   //     supabase-js paths); accept either shape defensively.
   const row = Array.isArray(data) ? data[0] : data;
   if (!isQuestionRow(row)) {

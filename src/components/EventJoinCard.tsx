@@ -31,6 +31,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { findEventByRef, type PublicEvent } from '../lib/eventLookup';
+import { cx, FOCUS_RING } from '../lib/a11y';
 
 /** Human-readable label for each event status, shown in join-card mode. */
 const STATUS_LABEL: Record<PublicEvent['status'], string> = {
@@ -166,7 +167,10 @@ function CodeEntryCard(): JSX.Element {
             aria-describedby={
               status === 'error' ? `${errorId} ${hintId}` : hintId
             }
-            className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+            className={cx(
+              'touch-target w-full rounded border border-ink-muted px-3 py-2 text-ink',
+              FOCUS_RING,
+            )}
           />
         </div>
 
@@ -188,7 +192,10 @@ function CodeEntryCard(): JSX.Element {
           type="submit"
           disabled={isResolving}
           aria-busy={isResolving}
-          className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+          className={cx(
+            'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+            FOCUS_RING,
+          )}
         >
           {isResolving ? 'Finding event…' : 'Join'}
         </button>
@@ -248,7 +255,10 @@ function ResolvedEventCard({
       <button
         type="button"
         onClick={() => navigate(eventViewPathFor(ref))}
-        className="touch-target mt-4 rounded bg-focus px-4 py-2 font-medium text-surface"
+        className={cx(
+          'touch-target mt-4 rounded bg-focus px-4 py-2 font-medium text-surface',
+          FOCUS_RING,
+        )}
       >
         Enter event
       </button>

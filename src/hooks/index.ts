@@ -17,3 +17,7 @@ export type {
   UseRealtimeChannelInput,
   UseRealtimeChannelResult,
 } from './useRealtimeChannel';
+export {
+  usePrefersReducedMotion,
+  PREFERS_REDUCED_MOTION_QUERY,
+} from './usePrefersReducedMotion';

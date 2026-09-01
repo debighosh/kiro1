@@ -45,6 +45,7 @@
  * (Voting with realtime propagation).
  */
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { cx, FOCUS_RING } from '../lib/a11y';
 import {
   readAudienceQuestions,
   castQuestionVote,
@@ -239,7 +240,10 @@ export function QuestionListAndVoting({
           id={`${sortLabelId}-select`}
           value={sort}
           onChange={(event) => setSort(event.target.value as QuestionSort)}
-          className="touch-target rounded border border-ink-muted px-3 py-2 text-ink"
+          className={cx(
+            'touch-target rounded border border-ink-muted px-3 py-2 text-ink',
+            FOCUS_RING,
+          )}
           data-testid="question-sort"
         >
           {SORT_OPTIONS.map((option) => (
@@ -294,7 +298,10 @@ export function QuestionListAndVoting({
             onClick={() => {
               void load(sort);
             }}
-            className="touch-target self-start rounded border border-ink-muted px-4 py-2 font-medium text-ink"
+            className={cx(
+              'touch-target self-start rounded border border-ink-muted px-4 py-2 font-medium text-ink',
+              FOCUS_RING,
+            )}
           >
             Try again
           </button>
@@ -332,16 +339,18 @@ export function QuestionListAndVoting({
                       ? `Remove your upvote. ${question.vote_count} votes.`
                       : `Upvote this question. ${question.vote_count} votes.`
                   }
-                  className={`touch-target flex min-w-[3.5rem] flex-col items-center rounded px-3 py-2 font-medium disabled:opacity-60 ${
+                  className={cx(
+                    'touch-target flex min-w-[3.5rem] flex-col items-center rounded px-3 py-2 font-medium disabled:opacity-60',
                     voted
                       ? 'bg-focus text-surface'
-                      : 'border border-ink-muted/40 text-ink'
-                  }`}
+                      : 'border border-ink-muted text-ink',
+                    FOCUS_RING,
+                  )}
                 >
                   <span aria-hidden="true">▲</span>
                   <span data-testid="vote-count">{question.vote_count}</span>
                 </button>
-                <p className="flex-1 whitespace-pre-wrap break-words text-ink">
+                <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-ink">
                   {question.text}
                 </p>
               </li>

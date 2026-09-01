@@ -5,6 +5,12 @@ import {
   type EventStatus,
 } from '../lib/eventStatus';
 import { EventError, transitionEventStatus } from '../lib/events';
+import { cx, FOCUS_RING } from '../lib/a11y';
+// Req 24.6: no JS-driven animation in this component; the global CSS
+// `@media (prefers-reduced-motion: reduce)` rule in index.css covers all CSS
+// transitions. No JS animation guard is needed here.
+// Req 24.8: `participant_identifier` is never read nor rendered here; only
+// the event id and status flow through this component.
 
 /**
  * `StatusTransitionControl` — the admin control for moving an event through its
@@ -160,7 +166,10 @@ export function StatusTransitionControl({
                 }}
                 disabled={isSubmitting}
                 aria-busy={busy}
-                className="touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60"
+                className={cx(
+                  'touch-target rounded bg-focus px-4 py-2 font-medium text-surface disabled:opacity-60',
+                  FOCUS_RING,
+                )}
               >
                 {busy ? 'Working…' : TRANSITION_ACTION_LABELS[target]}
               </button>

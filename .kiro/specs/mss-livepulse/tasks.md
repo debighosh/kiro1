@@ -1466,25 +1466,325 @@ write-only. _Requirements: 21.6, 21.8, 26.1_.
 
 ---
 
-## Milestone 5: Export, Hardening, and Event Readiness (placeholder — to be expanded when this milestone begins)
+## Milestone 5: Export, Hardening, and Event Readiness
 
-- [~] 37. Milestone 5: Export, Hardening, Event Readiness — expand into detailed tasks when the milestone begins
-  - Scope: CSV exports (questions, polls, word cloud) and the Markdown end-of-event summary
-    (calculated-data vs AI-interpretation separation); analytics dashboard; input
-    validation/sanitisation, server-side rate limiting, and consistent error handling;
-    the full automated test suite (Vitest + fast-check) and eight Playwright E2E flows;
-    accessibility checks; k6 load tests (P50/P95/error-rate at 500 VUs); and deployment/rollback
-    and moderator-guide documentation.
-  - Primary requirements: **Req 8, 9, 18, 21, 24, 26** (analytics, export, summary, security/RLS/
-    governance, accessibility/UX, testing/load validation).
-  - _Requirements: 8, 9, 18, 21, 24, 26_
+Scope: pure CSV serialisation (RFC-4180) for questions, polls, and word-cloud exports plus the
+Markdown end-of-event summary export wired to the existing M4 summary job; the analytics
+dashboard (unique-participant count, question status counts, vote/poll/word-cloud response
+counts, 5-minute engagement-over-time) with the admin export panel; hardening of the
+server-side rate limits, input validation/sanitisation, and the shared error contract; a
+mobile-first accessibility/responsive audit and per-screen fixes; the eight Playwright E2E
+flows and the k6 500-VU load-test script with a results template; and the ≥80% coverage gate
+plus the moderator operating guide and deployment/rollback documentation.
+
+Primary requirements: **Req 8, 9, 18, 21, 24, 26** (analytics, export, summary, security/RLS/
+governance, accessibility/UX, testing/load validation), plus the input-length rules from
+**Req 22.1–22.7** exercised by the sanitisation hardening.
+
+Correctness properties implemented here: no new universal properties are introduced; the M5
+property tests reinforce existing invariants — export identifier-exclusion (Req 9.5, 8.6) and
+the sanitisation allow-list / max-length rules (Req 21.9–21.12) — via pure, Node-testable
+modules, mirroring the M2/M3/M4 property-test style.
+
+**Implementation note (sandbox realities, same as Milestones 2/3/4):** the sandbox has no
+Postgres/Deno/`psql`/supabase CLI and no browser or live Supabase, so live RLS/RPC integration
+tests, the Playwright E2E specs, and the k6 load script are env-gated (`skipIf` on
+`TEST_SUPABASE_*` / a target base-URL env var, mirroring `src/db/rls.*.test.ts`) and the durable
+guarantees are locked down by pure, Node-testable modules under `src/lib/` (CSV serialisation,
+analytics aggregation, sanitisation) exercised by unit + fast-check property tests, plus the
+static schema guard (`src/db/migrations.test.ts`) for any new migration. New migration filenames
+use byte-lexicographic ordering and MUST sort AFTER the latest Milestone 4 migration
+`20260101000034_ai_jobs_clusters_rls.sql` — i.e. use `20260101000035_*` and upward. All
+anonymous writes remain server-mediated (SECURITY DEFINER RPCs / service-role Edge Functions)
+with NO client write RLS policies; the analytics/export read paths use the authenticated admin
+read path only. k6 is a separate binary (not npm) — these tasks author the script + docs;
+running it is an ops step. _Requirements: 21.6, 26.1_.
+
+- [x] 37. Implement the pure CSV serialisation and export builders (Req 9)
+  - [x] 37.1 Implement the pure RFC-4180 CSV serialisation module
+    - Add a pure, Node-testable `src/lib/csv.ts` exposing a `toCsv(rows, columns)` serialiser
+      that quotes fields containing commas, double-quotes, CR, or LF, escapes embedded
+      double-quotes by doubling them, and emits a header row followed by one row per record with
+      `\r\n` line endings; the module holds no I/O and no participant-identifier fields
+    - _Requirements: 9.1, 9.2, 9.3, 9.5_
+    - _Design: Components and Interfaces (Export_Service — CSV serialisation); Error Handling_
+
+  - [x] 37.2 Implement the questions / polls / word-cloud CSV export builders
+    - Add pure builder functions (e.g. in `src/lib/exports.ts`) that map query results to CSV
+      rows using `csv.ts` (37.1): questions → `text` (≤1000 chars) + `vote_count`; polls → poll
+      question text + option text + `response_count`; word cloud → distinct `normalised_text`
+      word + frequency; each builder excludes Participant_Identifiers entirely (Req 9.5);
+      empty-data input yields a header-only CSV plus a no-data indication flag (Req 9.6); the
+      builders are synchronous/pure so a serialisation failure produces no partial output
+      (Req 9.7) and complete well within 10 s for up to 10,000 rows
+    - _Requirements: 9.1, 9.2, 9.3, 9.5, 9.6, 9.7_
+    - _Design: Components and Interfaces (Export_Service — per-type builders); Data Models
+      (`questions.vote_count`, `poll_options.response_count`, `word_cloud_responses`)_
+
+  - [x] 37.3 Wire the Markdown end-of-event summary export to the existing M4 summary job
+    - Add a summary-export path that invokes the existing client `runSummary` in
+      `src/lib/aiClient.ts` (which calls the M4 `supabase/functions/ai-gateway/jobs/summary.ts`
+      Markdown producer) and downloads the returned Markdown as a `.md` file; when the summary
+      job reports AI unavailable, still download the calculated-data-only Markdown with the
+      visible AI-unavailable notice (Req 18.7); on job failure produce no partial file and
+      surface the failed export type (Req 9.7)
+    - _Requirements: 9.4, 18.1, 18.7, 9.7_
+    - _Design: Server-Side AI Gateway Design (End-of-event summary); Components and Interfaces
+      (Export_Service — Markdown summary)_
+
+  - [x]* 37.4 Write property + unit tests for the CSV module and export builders
+    - **Property (export identifier-exclusion):** generate export rows containing
+      identifier-shaped fields; assert no serialised CSV output contains any Participant_Identifier
+      (Req 9.5, 8.6). Unit-test RFC-4180 quoting/escaping (commas, quotes, CR/LF, doubled quotes);
+      the header-only + no-data indication on empty input (Req 9.6); the ≤1000/word-frequency
+      shaping; and that a builder never emits a partial file on failure (Req 9.7)
+    - _Requirements: 9.5, 9.6, 9.7, 8.6, 26.1_
+    - _Design: Components and Interfaces (Export_Service); Testing Strategy_
+
+- [x] 38. Implement the analytics dashboard and admin export UI (Req 8, 9, 25.6)
+  - [x] 38.1 Implement the pure analytics aggregation module
+    - Add a pure, Node-testable `src/lib/analytics.ts` computing from query inputs: the count of
+      distinct Participant_Identifiers as a non-negative integer (never exposing the raw values —
+      Req 8.6), question status counts (approved/featured/answered/hidden) and the total submitted
+      count, total question votes, poll response counts, word-cloud response counts, and an
+      engagement-over-time series bucketed into fixed 5-minute intervals spanning event start to
+      the current time (Req 8.1–8.4); a zero-interaction event yields 0 for every metric (Req 8.8)
+    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.6, 8.8_
+    - _Design: Components and Interfaces (Analytics_Service — aggregation); Data Models_
+
+  - [x] 38.2 Implement the authenticated analytics read path
+    - Add an admin-only read helper (e.g. in `src/lib/analytics.ts` or a thin client module) that
+      fetches the aggregate counts via the authenticated admin read path (DB aggregation queries,
+      no raw `participant_identifier` selection) and feeds `analytics.ts` (38.1); if retrieval
+      fails, surface an error state and return no partial or stale metrics (Req 8.7)
+    - _Requirements: 8.1, 8.6, 8.7_
+    - _Design: Components and Interfaces (Analytics_Service); RLS Design (authenticated admin read)_
+
+  - [x] 38.3 Build the admin analytics dashboard view with recharts
+    - Add an admin-only analytics route/view (under `RequireAuth`) rendering the metrics from
+      38.1/38.2 with recharts (already a dependency, used in M3), ARIA-labelled charts and
+      non-colour encodings; label every metric as representing platform interaction counts rather
+      than verified attendees (Req 8.5); never render any Participant_Identifier (Req 8.6); wire
+      the loading / empty / success / error UX states, showing the unavailable-analytics error
+      state on retrieval failure (Req 8.7, 24.7)
+    - _Requirements: 8.4, 8.5, 8.6, 8.7, 24.5, 24.7_
+    - _Design: Frontend Design (Admin analytics screen); Technology Stack (Recharts)_
+
+  - [x] 38.4 Build the admin export panel UI
+    - Add the export panel (on the AI provider configuration screen per Req 25.6, or the admin
+      dashboard) with buttons to download the questions / polls / word-cloud CSVs (via the 37.2
+      builders) and the Markdown summary (via 37.3); show a no-data indication when a requested
+      export is empty (Req 9.6) and a per-type failure indication with no partial download on
+      failure (Req 9.7); wire loading/success/error states (Req 24.7)
+    - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.6, 9.7, 25.6, 24.7_
+    - _Design: Frontend Design (Route map — AI config export panel); Components and Interfaces
+      (Export_Service)_
+
+  - [x]* 38.5 Write unit tests for the analytics aggregation and dashboard
+    - Test the 5-minute bucketing spanning start→now; status/vote/response counts; the
+      zero-interaction all-zeros case (Req 8.8); the platform-interaction labelling (Req 8.5); the
+      retrieval-failure error state with no partial/stale metrics (Req 8.7); and that no
+      Participant_Identifier reaches the DOM or chart data (Req 8.6)
+    - _Requirements: 8.4, 8.5, 8.6, 8.7, 8.8, 26.1_
+    - _Design: Components and Interfaces (Analytics_Service); Frontend Design (Admin analytics)_
+
+- [x] 39. Harden server-side rate limiting, input validation, and the error contract (Req 21, 22)
+  - [x] 39.1 Extend/confirm the server-side rate-limit action set for all anonymous writes
+    - Review the generic `check_and_record_rate_limit(participant, action, event_id, limit,
+      window)` RPC (`20260101000013_rate_limiting.sql`) and the submit/vote RPCs
+      (`20260101000014_submit_question_rpc.sql`, `20260101000015_vote_rpc.sql`); confirm the
+      question-submit limit (10 / 60 s) and vote limit (30 / 60 s) are enforced server-side
+      (Req 21.13, 21.14). Inspect `src/lib/polls.ts`, `src/lib/wordCloudClient.ts`, and the poll/
+      word-cloud respond RPCs (`20260101000026`, `20260101000027`); if any anonymous
+      poll/word-cloud response path relies on client-side limiting only, add a new migration
+      `20260101000035_rate_limit_actions.sql` extending the allowed action set (e.g.
+      `poll_respond`, `word_cloud_respond`) and wire those RPCs through the shared limiter so an
+      exceeded limit rejects the request and records nothing (Req 21.15)
+    - _Requirements: 21.13, 21.14, 21.15_
+    - _Design: RLS Design (Server-side rate limiting); Request/data flows (submit/vote/respond)_
+
+  - [x] 39.2 Implement the pure input sanitisation / allow-list module
+    - Add a pure, Node-testable `src/lib/sanitise.ts` enforcing a configurable allow-list of
+      permitted characters and a configurable maximum length (default 500) applied before
+      persistence, returning a validation-failure reason (field name + limit) on violation
+      without mutating input (Req 21.9, 21.10, 21.11, 22.7); provide an inert-text helper ensuring
+      submitted text is treated as plain text and never rendered as executable HTML/script
+      (Req 21.12, 24.8)
+    - _Requirements: 21.9, 21.10, 21.11, 21.12, 22.7, 24.8_
+    - _Design: Error Handling (Validation and sanitisation); Frontend Design (inert text rendering)_
+
+  - [x] 39.3 Wire the sanitisation module into the submit paths as defence-in-depth
+    - Apply `sanitise.ts` (39.2) in the shared question/poll/word-cloud input schemas and the
+      client submit helpers (`src/lib/questions.ts`, `src/lib/polls.ts`,
+      `src/lib/wordCloudClient.ts`) as defence-in-depth alongside the existing DB CHECK
+      constraints and Edge Function validation, rejecting the whole submission and retaining
+      entered values on a sanitisation/length violation (Req 21.11, 22.7)
+    - _Requirements: 21.9, 21.11, 21.12, 22.7_
+    - _Design: Error Handling (Validation errors — shared schemas); Request/data flows_
+
+  - [x] 39.4 Confirm and align the sanitised shared error contract across Edge Functions/RPCs
+    - Review the shared `supabase/functions/_shared/http.ts` error contract and the Edge
+      Functions/RPCs; confirm every error response is sanitised (no stack traces, provider
+      internals, credentials, or SQL detail leaked) and returns a consistent shape with a
+      caller-facing reason; align any function that diverges from the contract
+    - _Requirements: 21.8, 19.2_
+    - _Design: Error Handling (Sanitised error contract); Server-Side AI Gateway Design_
+
+  - [x]* 39.5 Write property + unit tests for sanitisation and rate-limit action set
+    - **Property (sanitisation allow-list + max length):** fast-check over random strings; assert
+      input is accepted iff every character is in the allow-list AND length ≤ the configured max,
+      and rejected with a field/limit reason otherwise, with input never mutated (Req 21.9, 21.10,
+      21.11). Unit-test the inert-text helper never yields executable HTML/script (Req 21.12); and
+      an env-gated assertion that the poll/word-cloud respond paths reject on an exceeded
+      server-side limit recording nothing (Req 21.15)
+    - _Requirements: 21.9, 21.10, 21.11, 21.12, 21.15, 26.1_
+    - _Design: Error Handling; RLS Design (rate limiting)_
+
+- [x] 40. Accessibility and mobile-first responsive audit + fixes (Req 24)
+  - [x] 40.1 Add shared accessibility utilities
+    - Add reusable helpers (e.g. `src/lib/a11y.ts` and/or a `usePrefersReducedMotion` hook and a
+      focus-ring utility) that expose a reduced-motion preference, a standard visible focus-ring
+      class meeting ≥3:1 contrast, and helpers for non-colour status indicators (text/icon/shape),
+      for reuse across screens
+    - _Requirements: 24.3, 24.4, 24.6_
+    - _Design: Frontend Design (Mobile-first & accessibility approach)_
+
+  - [x] 40.2 Apply mobile-first responsive + touch-target fixes to audience screens
+    - Audit and fix the audience screens (`EventJoinCard`, `QuestionSubmissionForm`,
+      `QuestionListAndVoting`, `PollCard`, `WordCloudCard`, audience route) to reflow without
+      horizontal scroll at 320–768 CSS px with primary actions in the bottom 60% of the viewport
+      (Req 24.1), interactive touch targets ≥44×44 px with ≥8 px spacing (Req 24.2), and text
+      contrast ≥4.5:1 / ≥3:1 (Req 24.9)
+    - _Requirements: 24.1, 24.2, 24.9_
+    - _Design: Frontend Design (Mobile-first layout)_
+
+  - [x] 40.3 Apply keyboard-nav, labelling, and non-colour-status fixes across admin/presenter screens
+    - Audit and fix the admin/presenter screens (login, event editor, `StatusTransitionControl`,
+      `ModerationQueue`, poll/word-cloud editors, analytics, AI config, `PresenterView`) for
+      logical keyboard tab order with a visible focus indicator ≥3:1 (Req 24.3), non-colour status
+      indicators (Req 24.4), programmatically-associated accessible labels for all form fields,
+      controls, and charts (Req 24.5), reduced-motion honoring via the 40.1 hook (Req 24.6), and
+      consistent loading/empty/success/error states with a retry action (Req 24.7); ensure no
+      Participant_Identifier is rendered in any element, attribute, tooltip, or chart data
+      (Req 24.8)
+    - _Requirements: 24.3, 24.4, 24.5, 24.6, 24.7, 24.8_
+    - _Design: Frontend Design (Accessibility & UX states)_
+
+  - [x]* 40.4 Write jsdom + testing-library a11y invariant tests
+    - Using `@testing-library`: assert form fields/controls/charts expose non-empty accessible
+      names (Req 24.5); status is conveyed with a non-colour indicator (Req 24.4); each async
+      surface renders empty/loading/success/error states with a retry action (Req 24.7); the
+      reduced-motion path disables non-essential animation (Req 24.6); and no Participant_Identifier
+      string reaches the DOM (Req 24.8)
+    - _Requirements: 24.4, 24.5, 24.6, 24.7, 24.8, 26.1_
+    - _Design: Frontend Design (Accessibility & UX states); Testing Strategy_
+
+- [x] 41. Author the Playwright E2E suite (Req 26.4)
+  - [x] 41.1 Add Playwright config, scripts, and env-gated fixtures
+    - Add `@playwright/test` as a devDependency, a `playwright.config.ts`, an `e2e/` directory,
+      and npm scripts (`e2e`, `e2e:headed`); add a shared fixture that reads the target base URL
+      and Supabase env and `skip`s cleanly when they are absent (mirroring the DB-less env-gating
+      in `src/db/rls.*.test.ts`)
+    - _Requirements: 26.4_
+    - _Design: Testing Strategy (End-to-end tests); Deployment and Environment_
+
+  - [x] 41.2 Implement the admin event lifecycle + participant Q&A E2E specs
+    - Author E2E specs for: (a) an Administrator creating and launching an event; (b) a Participant
+      joining and submitting a question; (c) a Moderator approving and featuring a question; each
+      asserting the expected observable outcome and env-gated per 41.1
+    - _Requirements: 26.4_
+    - _Design: Testing Strategy (End-to-end tests)_
+
+  - [x] 41.3 Implement the voting + poll + word-cloud E2E specs
+    - Author E2E specs for: (d) multiple Participants voting with updating counts; (e) an
+      Administrator opening a poll and receiving responses; (f) an Administrator opening a
+      word-cloud prompt and receiving responses; each asserting the expected observable outcome
+      and env-gated per 41.1
+    - _Requirements: 26.4_
+    - _Design: Testing Strategy (End-to-end tests)_
+
+  - [x] 41.4 Implement the presenter + end-and-export E2E specs
+    - Author E2E specs for: (g) a Presenter switching modes; (h) an Administrator ending an event
+      and exporting results; each asserting the expected observable outcome and env-gated per 41.1
+    - _Requirements: 26.4_
+    - _Design: Testing Strategy (End-to-end tests); Components and Interfaces (Export_Service)_
+
+- [x] 42. Author the k6 load-test script and the coverage gate (Req 26.5, 26.6, 26.7, 26.1, 26.2, 26.3)
+  - [x] 42.1 Author the k6 500-VU load-test script
+    - Add a k6 script under `load/` simulating a configurable number of Participants (default 500
+      concurrent) performing join, concurrent question submissions, concurrent votes, poll
+      responses, word-cloud responses, and presenter/moderator realtime subscriptions (Req 26.5);
+      define k6 thresholds and custom metrics capturing per-operation P50/P95 response times, error
+      rate, and max sustained concurrency (Req 26.6); parameterise the VU count and target env
+    - _Requirements: 26.5, 26.6_
+    - _Design: Testing Strategy (Load tests); Non-functional (Realtime performance targets)_
+
+  - [x] 42.2 Add the load-test results template and 500-user claim gate documentation
+    - Add `load/README.md` documenting the load-test configuration, how to run k6 against a hosted
+      target, a results template for identified bottlenecks and measured limits (per-operation P50/
+      P95 ms, error-rate %, max sustained concurrent users), and the explicit 500-user claim gate:
+      the platform may claim 500-concurrent support only when a hosted run holds error rate ≤1% and
+      P95 ≤2000 ms (Req 26.6, 26.7)
+    - _Requirements: 26.6, 26.7_
+    - _Design: Testing Strategy (Load tests); Non-functional (500-user validation gate)_
+
+  - [x] 42.3 Establish the ≥80% coverage gate and positive+negative behaviour coverage
+    - Using the existing `test:coverage` script, verify the Vitest suite achieves ≥80% line
+      coverage across the modules implementing the Req-26.1/26.2 behaviours (event status rules,
+      question validation, moderation visibility, duplicate-vote prevention, poll response
+      uniqueness/updates, word-cloud uniqueness/normalisation, admin authorisation; presenter
+      visibility, AI failure handling, AI-config authorisation, write-only credential behaviour,
+      credential encryption/Secret_Reference, endpoint validation/allowlist, sanitised provider
+      errors, structured-output validation); add any missing passing + negative (rejection) test so
+      each listed behaviour has both, and confirm the suite runs with no failures and a
+      machine-readable report (Req 26.1, 26.2, 26.3)
+    - _Requirements: 26.1, 26.2, 26.3_
+    - _Design: Testing Strategy (Automated tests, coverage)_
+
+- [x] 43. Author the moderator guide and deployment/rollback documentation (Req 26, event readiness)
+  - [x] 43.1 Write the moderator operating guide
+    - Add `docs/moderator-guide.md` covering how to run an event end-to-end: create/launch an
+      event and its status transitions, moderation-queue actions (approve/feature/answer/hide) and
+      filters, presenter modes (join/featured/top-questions/poll-results/word-cloud/ai-themes),
+      opening/closing polls and word-cloud prompts, the AI features (categorise/cluster/theme
+      insights/summary), and running the CSV/Markdown exports
+    - _Requirements: 26.4_
+    - _Design: Deployment and Environment (Operating guidance)_
+
+  - [x] 43.2 Write the deployment and rollback documentation
+    - Add `docs/deployment.md` covering Supabase project setup, applying the `supabase/migrations`
+      in order, deploying the Edge Functions (`create-event`, `moderate-question`,
+      `transition-event-status`, `ai-gateway`, …), the required env/secrets (`SUPABASE_URL`,
+      `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_CREDENTIAL_ENCRYPTION_KEY`,
+      `AI_ENDPOINT_ALLOWLIST`, `VITE_*`), the Playwright and k6 run steps, and a rollback
+      procedure (schema/migration and Edge Function rollback)
+    - _Requirements: 21.8, 26.5_
+    - _Design: Deployment and Environment (Environment variables; deploy/rollback)_
+
+- [x] 44. Milestone 5 checkpoint — verify Export, Hardening, and Event Readiness completeness
+  - [x] 44.1 Verify the Milestone 5 definition of done
+    - Confirm the CSV export builders exclude Participant_Identifiers and produce header-only CSVs
+      with a no-data indication on empty input and no partial file on failure; confirm the Markdown
+      summary export downloads the M4 summary (with the AI-unavailable notice path); confirm the
+      analytics dashboard renders all metrics (labelled as platform interaction counts, zero-safe,
+      no identifiers) with an unavailable error state; confirm the server-side rate limits cover
+      all anonymous write paths and the sanitisation allow-list/max-length + inert-text rendering
+      are enforced; confirm the accessibility/responsive fixes (320–768 px reflow, 44×44 targets,
+      keyboard/focus, labels, reduced motion, non-colour status, contrast, no identifiers); confirm
+      the eight Playwright E2E flows are authored + env-gated and the k6 500-VU script + results
+      template are present; confirm the Vitest suite meets ≥80% coverage with passing + negative
+      tests for the Req-26.1/26.2 behaviours; confirm the moderator guide and deployment/rollback
+      docs exist; and confirm `npm run build`, `npm test`, `npm run lint`, and
+      `npm run typecheck:test` all pass. Ensure all tests pass, ask the user if questions arise.
+    - _Requirements: 8.5, 8.6, 9.5, 9.6, 21.13, 21.15, 24.1, 24.8, 26.1, 26.4, 26.7_
+    - _Design: Components and Interfaces (Export_Service, Analytics_Service); Error Handling; RLS
+      Design; Frontend Design; Testing Strategy; Deployment and Environment_
 
 ---
 
 ## Notes
 
-- Milestones 1, 2, 3, and 4 are fully detailed; Milestone 5 remains a placeholder to be expanded
-  into detailed, checkbox-level tasks when the milestone begins.
+- Milestones 1, 2, 3, 4, and 5 are fully detailed at the checkbox level.
 - **Each milestone must be completed and verified before the next begins** (M1 → M2 → M3 → M4 →
   M5), per the product implementation plan.
 - Note: expanding Milestone 2 into an epic-level breakdown consumed top-level task numbers
@@ -1500,6 +1800,11 @@ write-only. _Requirements: 21.6, 21.8, 26.1_.
   placeholder was therefore renumbered from 27 to 37 (its scope and requirement references are
   unchanged). Milestone 1 tasks (1–10), Milestone 2 tasks (11–18), and Milestone 3 tasks (19–25)
   are not renumbered.
+- Note: expanding Milestone 5 into an epic-level breakdown consumed top-level task numbers
+  37–44 (starting at the number the M5 placeholder previously held, task 37); this is the final
+  milestone, so no later placeholders required renumbering (its scope and requirement references
+  are unchanged). Milestone 1 tasks (1–10), Milestone 2 tasks (11–18), Milestone 3 tasks (19–25),
+  and Milestone 4 tasks (26–36) are not renumbered.
 - Tasks marked with `*` are optional (tests: unit, property-based, RLS/integration) and can be
   skipped for a faster MVP; core implementation tasks are never optional.
 - Every task references specific requirement clauses for traceability and, where relevant, the
@@ -1509,7 +1814,8 @@ write-only. _Requirements: 21.6, 21.8, 26.1_.
 - The Milestone 1 checkpoint (task 10) enforces the foundation definition of done before
   Milestone 2 starts; the Milestone 2 checkpoint (task 18) does the same before Milestone 3; the
   Milestone 3 checkpoint (task 25) does the same before Milestone 4; the Milestone 4 checkpoint
-  (task 36) does the same before Milestone 5.
+  (task 36) does the same before Milestone 5; and the Milestone 5 checkpoint (task 44) verifies
+  the final export, hardening, and event-readiness definition of done.
 - Milestone 2 decision: `questions.cluster_id` is a plain nullable `uuid` (no FK yet) because
   the `question_clusters` table it references is introduced in Milestone 4; the deferred
   `FK → question_clusters(id) ON DELETE SET NULL` is added by the M4 clusters migration.
@@ -1565,7 +1871,14 @@ write-only. _Requirements: 21.6, 21.8, 26.1_.
     { "id": 40, "tasks": ["33.2", "33.3", "33.4"] },
     { "id": 41, "tasks": ["34.1", "34.2", "34.3", "34.4"] },
     { "id": 42, "tasks": ["34.5", "35.1", "35.2"] },
-    { "id": 43, "tasks": ["36.1"] }
+    { "id": 43, "tasks": ["36.1"] },
+
+    { "id": 44, "tasks": ["37.1", "39.1", "39.2", "40.1", "41.1", "42.1", "43.1", "43.2"] },
+    { "id": 45, "tasks": ["37.2", "37.3", "38.1", "39.3", "39.4", "40.2", "40.3", "42.2"] },
+    { "id": 46, "tasks": ["37.4", "38.2", "39.5", "41.2", "41.3", "41.4"] },
+    { "id": 47, "tasks": ["38.3", "38.4", "40.4", "42.3"] },
+    { "id": 48, "tasks": ["38.5"] },
+    { "id": 49, "tasks": ["44.1"] }
   ]
 }
 ```
